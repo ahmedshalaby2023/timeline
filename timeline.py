@@ -6,6 +6,13 @@ import base64
 from uuid import uuid4
 import pandas as pd
 
+
+def rerun_app():
+    rerun_fn = getattr(st, "rerun", None) or getattr(st, "experimental_rerun", None)
+    if rerun_fn is None:
+        raise AttributeError("Streamlit rerun function not available")
+    rerun_fn()
+
 DEFAULT_TITLE = "Interactive Event Timeline with Lens Magnifier"
 
 st.set_page_config(page_title="Event Timeline Lens", page_icon="⏱️", layout="wide")
@@ -46,7 +53,7 @@ with st.sidebar:
                 }
             )
             # Force a rerun so the timeline updates immediately
-            st.experimental_rerun()
+            rerun_app()
         else:
             st.warning("Please enter an event title before adding.")
 
@@ -90,7 +97,7 @@ with st.sidebar:
                 if new_events:
                     st.session_state["events"].extend(new_events)
                     st.success(f"Imported {len(new_events)} events from Excel.")
-                    st.experimental_rerun()
+                    rerun_app()
                 else:
                     st.warning("No valid rows found to import.")
         except Exception as exc:
@@ -121,10 +128,10 @@ with st.sidebar:
                 st.session_state['events'][idx]['title'] = new_title
                 st.session_state['events'][idx]['date'] = new_date.isoformat()
                 st.session_state['events'][idx]['image'] = new_image_data
-                st.experimental_rerun()
+                rerun_app()
             if col2.button("Delete", key=f"delete_{ev['id']}"):
                 st.session_state['events'].pop(idx)
-                st.experimental_rerun()
+                rerun_app()
 
 # If no events, prompt the user and stop
 if not st.session_state["events"]:
