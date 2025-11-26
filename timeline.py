@@ -47,14 +47,43 @@ st.set_page_config(page_title="Event Timeline Lens", page_icon="⏱️", layout=
 if "timeline_title" not in st.session_state:
     st.session_state["timeline_title"] = DEFAULT_TITLE
 
-st.title(st.session_state["timeline_title"])
+# Visualization layout preference
+if "timeline_view" not in st.session_state:
+    st.session_state["timeline_view"] = "Orbit"
 
 # Initialize session state for events
 if "events" not in st.session_state:
     st.session_state["events"] = []
 
+if "tour_trigger" not in st.session_state:
+    st.session_state["tour_trigger"] = False
+
+st.title(st.session_state["timeline_title"])
+
+tour_trigger = False
+if st.session_state["events"]:
+    if st.button(
+        "Play Prezi-style Tour",
+        use_container_width=True,
+        help="Animate the timeline with dynamic zoom-and-pan transitions."
+    ):
+        st.session_state["tour_trigger"] = True
+
+    tour_trigger = st.session_state["tour_trigger"]
+    st.session_state["tour_trigger"] = False
+else:
+    st.session_state["tour_trigger"] = False
+
 # Sidebar for data entry
 with st.sidebar:
+    view_choice = st.radio(
+        "Visualization Style",
+        ("Timeline", "Orbit"),
+        index=0 if st.session_state["timeline_view"] == "Timeline" else 1,
+        help="Choose between a horizontal timeline or circular orbit layout."
+    )
+    st.session_state["timeline_view"] = view_choice
+
     st.session_state["timeline_title"] = st.text_input(
         "Timeline Title",
         value=st.session_state.get("timeline_title", DEFAULT_TITLE),
@@ -218,22 +247,380 @@ sorted_events = sorted(
 
 # Serialize to JSON for JavaScript
 events_json = json.dumps(sorted_events)
+view_mode = st.session_state["timeline_view"]
+tour_js_flag = "true" if tour_trigger else "false"
 
 # HTML + CSS + JavaScript for the timeline
-html_content = f"""
+orbit_html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {{
+      margin: 0;
+      position: relative;
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at 15% 15%, #fefcea 0%, #f1da36 25%, #f0b800 55%, #f09900 100%);
+      overflow: hidden;
+    }}
+
+    #fog {{
+      position: absolute;
+      inset: -25%;
+      pointer-events: none;
+      z-index: 50;
+      background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0.28) 220px, rgba(189, 206, 223, 0.6) 100%);
+      filter: blur(12px);
+      opacity: 0.75;
+    }}
+
+    #timeline-stage {{
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 1.2s cubic-bezier(0.17, 0.84, 0.44, 1);
+      transform-origin: center center;
+      will-change: transform;
+      z-index: 100;
+    }}
+
+    #orbit-container {{
+      position: relative;
+      width: min(90vw, 620px);
+      height: min(90vw, 620px);
+      max-width: 640px;
+      max-height: 640px;
+      aspect-ratio: 1;
+    }}
+
+    #orbit-ring {{
+      position: absolute;
+      inset: 6%;
+      border-radius: 50%;
+      border: 2px dashed rgba(255, 255, 255, 0.55);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+      opacity: 0.9;
+      animation: orbitGlow 6s ease-in-out infinite;
+    }}
+
+    @keyframes orbitGlow {{
+      0%, 100% {{
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+        opacity: 0.85;
+      }}
+      50% {{
+        box-shadow: 0 0 35px rgba(255, 255, 255, 0.45);
+        opacity: 1;
+      }}
+    }}
+
+    #orbit-core {{
+      position: absolute;
+      inset: 45%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.05) 100%);
+      box-shadow: 0 0 45px rgba(255, 255, 255, 0.35);
+    }}
+
+    #orbit-events {{
+      position: absolute;
+      inset: 0;
+    }}
+
+    .event {{
+      position: absolute;
+      width: 120px;
+      text-align: center;
+      color: #ffffff;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(0.82);
+      transition: left 0.6s ease, top 0.6s ease, transform 0.4s ease;
+    }}
+
+    .event .bubble {{
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      margin: 0 auto;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      background: var(--color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+      transition: border-color 0.35s ease, box-shadow 0.35s ease;
+    }}
+
+    .event .bubble img {{
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(0.65);
+    }}
+
+    .event .label {{
+      margin-top: 10px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: rgba(255, 255, 255, 0.8);
+    }}
+
+    .event .date {{
+      margin-top: 4px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.55);
+    }}
+
+    .event.tour-highlight {{
+      z-index: 20;
+      transform: translate(-50%, -50%) scale(1.2);
+    }}
+
+    .event.tour-highlight .bubble {{
+      border-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }}
+
+    .event.tour-highlight .label {{
+      color: #ffffff;
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+    }}
+
+    #lens {{
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0) 100%);
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      transition: left 0.6s ease, top 0.6s ease, opacity 0.6s ease;
+      z-index: 30;
+      opacity: 0;
+    }}
+
+    #lens.visible {{
+      opacity: 1;
+    }}
+  </style>
+</head>
+<body>
+  <div id="fog"></div>
+  <div id="timeline-stage">
+    <div id="orbit-container">
+      <div id="orbit-ring"></div>
+      <div id="orbit-core"></div>
+      <div id="orbit-events"></div>
+      <div id="lens"></div>
+    </div>
+  </div>
+  <script>
+    const events = {events_json};
+    const tourTrigger = {tour_js_flag};
+    events.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const stage = document.getElementById('timeline-stage');
+    const orbitContainer = document.getElementById('orbit-container');
+    const eventsHost = document.getElementById('orbit-events');
+    const lens = document.getElementById('lens');
+    const eventElements = [];
+    const baseAngles = [];
+
+    events.forEach((ev, idx) => {{
+      const eventDiv = document.createElement('div');
+      eventDiv.className = 'event';
+      eventDiv.dataset.index = idx;
+
+      const hue = (idx * 137.5) % 360;
+      const color = `hsl(${{hue}}, 70%, 50%)`;
+      eventDiv.style.setProperty('--color', color);
+
+      const bubbleContent = ev.image
+        ? `<img src="data:image/png;base64,${{ev.image}}" alt="${{ev.title}}" />`
+        : '';
+      const dateLabel = new Date(ev.date).toLocaleDateString(undefined, {{ year: 'numeric', month: 'short', day: 'numeric' }});
+
+      eventDiv.innerHTML = `
+        <div class="bubble">${{bubbleContent}}</div>
+        <div class="label">${{ev.title}}</div>
+        <div class="date">${{dateLabel}}</div>
+      `;
+
+      eventsHost.appendChild(eventDiv);
+      eventElements.push(eventDiv);
+    }});
+
+    const TWO_PI = Math.PI * 2;
+    const TOP_ALIGNMENT = -Math.PI / 2;
+    const count = eventElements.length;
+
+    eventElements.forEach((el, idx) => {{
+      const angle = count ? TWO_PI * idx / count : 0;
+      baseAngles.push(angle);
+      el.dataset.baseAngle = angle;
+    }});
+
+    let orbitRadius = 0;
+    let center = {{ x: 0, y: 0 }};
+    let currentOffset = 0;
+
+    function highlightEvent(target) {{
+      eventElements.forEach(el => el.classList.remove('tour-highlight'));
+      if (target) {{
+        target.classList.add('tour-highlight');
+      }}
+    }}
+
+    function renderOrbit(offset = currentOffset) {{
+      currentOffset = offset;
+      eventElements.forEach((el, idx) => {{
+        const angle = baseAngles[idx] + currentOffset;
+        const x = center.x + orbitRadius * Math.cos(angle);
+        const y = center.y + orbitRadius * Math.sin(angle);
+        el.dataset.currentAngle = angle;
+        el.style.left = `${{x}}px`;
+        el.style.top = `${{y}}px`;
+      }});
+    }}
+
+    function updateLensPosition() {{
+      if (!eventElements.length) {{
+        lens.classList.remove('visible');
+        return;
+      }}
+      const lensOffset = orbitRadius * 0.75;
+      lens.style.left = `${{center.x}}px`;
+      lens.style.top = `${{center.y - lensOffset}}px`;
+      lens.classList.add('visible');
+    }}
+
+    function recalcGeometry() {{
+      const rect = orbitContainer.getBoundingClientRect();
+      const size = Math.min(rect.width, rect.height);
+      orbitRadius = eventElements.length ? Math.max(size / 2 - 110, size / 4) : 0;
+      center = {{ x: rect.width / 2, y: rect.height / 2 }};
+      updateLensPosition();
+      renderOrbit(currentOffset);
+    }}
+
+    function focusEvent(el, {{ highlight = true }} = {{}}) {{
+      if (!el) {{
+        return;
+      }}
+      const baseAngle = parseFloat(el.dataset.baseAngle);
+      const offset = TOP_ALIGNMENT - baseAngle;
+      renderOrbit(offset);
+      if (highlight) {{
+        highlightEvent(el);
+      }}
+      stage.style.transform = 'scale(1.2) translateY(-14px)';
+    }}
+
+    function focusOverview() {{
+      renderOrbit(0);
+      highlightEvent(null);
+      stage.style.transform = 'scale(1) translateY(0px)';
+    }}
+
+    let tourScenes = [];
+    function rebuildScenes() {{
+      tourScenes = eventElements.map(el => ({{ element: el }}));
+      if (eventElements.length) {{
+        tourScenes.push({{ overview: true }});
+      }}
+    }}
+
+    eventElements.forEach(el => {{
+      el.addEventListener('mouseenter', () => {{
+        focusEvent(el);
+      }});
+      el.addEventListener('click', () => {{
+        focusEvent(el);
+      }});
+    }});
+
+    function runTourAnimation() {{
+      if (!tourScenes.length) {{
+        return;
+      }}
+      let index = 0;
+      const highlightDuration = 2600;
+
+      const step = () => {{
+        const scene = tourScenes[index];
+        if (!scene) return;
+
+        if (scene.overview) {{
+          focusOverview();
+        }} else {{
+          focusEvent(scene.element);
+        }}
+
+        index += 1;
+        if (index < tourScenes.length) {{
+          setTimeout(step, highlightDuration);
+        }} else {{
+          setTimeout(() => {{
+            focusOverview();
+          }}, highlightDuration);
+        }}
+      }};
+
+      setTimeout(step, 600);
+    }}
+
+    function handleResize() {{
+      recalcGeometry();
+    }}
+
+    window.addEventListener('resize', () => {{
+      window.requestAnimationFrame(handleResize);
+    }});
+
+    recalcGeometry();
+    rebuildScenes();
+    focusOverview();
+    if (tourTrigger) {{
+      setTimeout(runTourAnimation, 500);
+    }}
+  </script>
+</body>
+</html>
+"""
+
+timeline_html = f"""
 <!DOCTYPE html>
 <html lang=\"en\">
 <head>
   <meta charset=\"UTF-8\" />
   <style>
-    /* Page styles */
     body {{
       margin: 0;
       font-family: Arial, sans-serif;
       background: radial-gradient(circle at 15% 15%, #fefcea 0%, #f1da36 25%, #f0b800 55%, #f09900 100%);
+      overflow: hidden;
     }}
 
-    /* Lens overlay */
+    #fog {{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 950;
+      background: radial-gradient(circle at 50% 150px, rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 130px, rgba(218, 226, 234, 0.32) 190px, rgba(201, 210, 220, 0.6) 100%);
+      backdrop-filter: blur(6px) saturate(0.8);
+      -webkit-backdrop-filter: blur(6px) saturate(0.8);
+      mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
+      -webkit-mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
+    }}
+
     #lens {{
       position: fixed;
       top: 20px;
@@ -263,20 +650,6 @@ html_content = f"""
       pointer-events: none;
     }}
 
-    /* Fog outside lens */
-    #fog {{
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 950;
-      background: radial-gradient(circle at 50% 150px, rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 130px, rgba(218, 226, 234, 0.32) 190px, rgba(201, 210, 220, 0.6) 100%);
-      backdrop-filter: blur(6px) saturate(0.8);
-      -webkit-backdrop-filter: blur(6px) saturate(0.8);
-      mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
-      -webkit-mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
-    }}
-
-
     @keyframes lensPulse {{
       0%, 100% {{
         box-shadow: 0 0 18px rgba(255, 255, 255, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.2);
@@ -286,18 +659,27 @@ html_content = f"""
       }}
     }}
 
-    /* Timeline container */
+    #timeline-stage {{
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      padding-top: 120px;
+      transition: transform 1.2s cubic-bezier(0.17, 0.84, 0.44, 1);
+      transform-origin: center top;
+      will-change: transform;
+    }}
+
     #timeline-wrapper {{
       position: relative;
       width: 100%;
       overflow-x: scroll;
       overflow-y: hidden;
       white-space: nowrap;
-      padding: 105px 50vw 80px; /* align bubbles and labels with enlarged lens center */
+      padding: 30px 50vw 60px;
       box-sizing: border-box;
+      scroll-behavior: smooth;
     }}
 
-    /* Individual event */
     .event {{
       display: inline-block;
       width: 120px;
@@ -308,7 +690,6 @@ html_content = f"""
       transform-origin: center center;
     }}
 
-    /* Colored bubble */
     .bubble {{
       width: 70px;
       height: 70px;
@@ -372,7 +753,6 @@ html_content = f"""
       transition: color 0.35s ease;
     }}
 
-    /* Magnification effect when in lens */
     .event.focused {{
       transform: scale(2.0);
       z-index: 10;
@@ -394,6 +774,36 @@ html_content = f"""
       animation: none;
     }}
 
+    .event.tour-highlight {{
+      transform: scale(2.6) rotate(-2deg) translateY(-12px);
+      z-index: 15;
+    }}
+
+    .event.tour-highlight .bubble {{
+      border-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 14px 45px rgba(0, 0, 0, 0.45);
+    }}
+
+    .event.tour-highlight .bubble::before,
+    .event.tour-highlight .bubble::after {{
+      opacity: 0;
+    }}
+
+    .event.tour-highlight .bubble img {{
+      filter: blur(0) saturate(1.1);
+      transform: scale(1);
+      animation: none;
+    }}
+
+    .event.tour-highlight .label {{
+      color: #ffffff;
+      text-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    }}
+
+    .event.tour-highlight .date {{
+      color: rgba(255, 255, 255, 0.92);
+    }}
+
     @keyframes tremor {{
       0%, 100% {{ transform: scale(1.12) translate(0px, 0px); }}
       20% {{ transform: scale(1.12) translate(-1.5px, 1.2px); }}
@@ -402,60 +812,45 @@ html_content = f"""
       80% {{ transform: scale(1.12) translate(1.6px, 1px); }}
       100% {{ transform: scale(1.12) translate(1.8px, 1px); }}
     }}
-
-    .event.focused .label {{
-      color: #ffffff;
-    }}
-
-    .event.focused .date {{
-      color: rgba(255, 255, 255, 0.85);
-    }}
   </style>
 </head>
 <body>
-  <!-- Fog overlay -->
-  <div id="fog"></div>
-
-  <!-- Lens overlay -->
-  <div id="lens"></div>
-
-  <!-- Timeline container -->
-  <div id="timeline-wrapper"></div>
-
+  <div id=\"fog\"></div>
+  <div id=\"lens\"></div>
+  <div id=\"timeline-stage\">
+    <div id=\"timeline-wrapper\"></div>
+  </div>
   <script>
-    // Event data from Streamlit
     const events = {events_json};
+    const tourTrigger = {tour_js_flag};
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
     const wrapper = document.getElementById('timeline-wrapper');
+    const stage = document.getElementById('timeline-stage');
     const eventElements = [];
 
-    // Populate timeline with events
     events.forEach((ev, idx) => {{
       const eventDiv = document.createElement('div');
       eventDiv.className = 'event';
       eventDiv.dataset.id = ev.id;
 
-      // Random but consistent color per event using idx
-      const hue = (idx * 137.5) % 360; // Golden angle for decent color spread
+      const hue = (idx * 137.5) % 360;
       const color = `hsl(${{hue}}, 70%, 50%)`;
       eventDiv.style.setProperty('--color', color);
 
-      // Event HTML
       const bubbleContent = ev.image 
-        ? `<img src="data:image/png;base64,${{ev.image}}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` 
+        ? `<img src=\"data:image/png;base64,${{ev.image}}\" style=\"width:100%;height:100%;object-fit:cover;border-radius:50%;\">`
         : '';
       const dateLabel = new Date(ev.date).toLocaleDateString(undefined, {{ year: 'numeric', month: 'short', day: 'numeric' }});
       eventDiv.innerHTML = `
-        <div class="bubble">${{bubbleContent}}</div>
-        <div class="label">${{ev.title}}</div>
-        <div class="date">${{dateLabel}}</div>
+        <div class=\"bubble\">${{bubbleContent}}</div>
+        <div class=\"label\">${{ev.title}}</div>
+        <div class=\"date\">${{dateLabel}}</div>
       `;
 
       wrapper.appendChild(eventDiv);
       eventElements.push(eventDiv);
     }});
 
-    // Lens center position
     let lensX = window.innerWidth / 2;
 
     function getScrollLeftForEvent(el) {{
@@ -465,7 +860,6 @@ html_content = f"""
       return Math.max(0, targetCenter - lensOffset);
     }}
 
-    // Helper to update focused state based on lens position
     function updateFocus() {{
       document.querySelectorAll('.event').forEach(el => {{
         const rect = el.getBoundingClientRect();
@@ -478,21 +872,87 @@ html_content = f"""
       }});
     }}
 
-    // Initial check
     updateFocus();
 
-    // Re-check whenever user scrolls or resizes
     wrapper.addEventListener('scroll', () => {{
       updateFocus();
     }});
+
     window.addEventListener('resize', () => {{
       lensX = window.innerWidth / 2;
       updateFocus();
     }});
+
+    const tourScenes = eventElements.map((el, idx) => ({{
+      element: el,
+      scale: 1.35 + (idx % 3) * 0.25,
+      rotate: (idx % 2 === 0 ? -4 : 4),
+      translateY: idx % 2 === 0 ? -14 : 10
+    }}));
+
+    if (eventElements.length) {{
+      tourScenes.push({{
+        element: null,
+        scale: 1,
+        rotate: 0,
+        translateY: 0,
+        overview: true
+      }});
+    }}
+
+    function runTourAnimation() {{
+      if (!eventElements.length) {{
+        return;
+      }}
+
+      wrapper.style.scrollBehavior = 'smooth';
+      stage.style.transform = 'scale(1) rotate(0deg) translateY(0px)';
+
+      let index = 0;
+      const highlightDuration = 2600;
+
+      const step = () => {{
+        eventElements.forEach(el => el.classList.remove('tour-highlight'));
+        const scene = tourScenes[index];
+
+        if (!scene) {{
+          return;
+        }}
+
+        if (scene.element) {{
+          const scrollLeft = getScrollLeftForEvent(scene.element);
+          wrapper.scrollTo({{ left: scrollLeft, behavior: 'smooth' }});
+          scene.element.classList.add('tour-highlight');
+        }} else {{
+          const centerScroll = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
+          wrapper.scrollTo({{ left: centerScroll, behavior: 'smooth' }});
+        }}
+
+        stage.style.transform = `scale(${{scene.scale}}) rotate(${{scene.rotate}}deg) translateY(${{scene.translateY || 0}}px)`;
+
+        index += 1;
+        if (index < tourScenes.length) {{
+          setTimeout(step, highlightDuration);
+        }} else {{
+          setTimeout(() => {{
+            eventElements.forEach(el => el.classList.remove('tour-highlight'));
+            stage.style.transform = 'scale(1) rotate(0deg) translateY(0px)';
+          }}, highlightDuration);
+        }}
+      }};
+
+      setTimeout(step, 600);
+    }}
+
+    if (tourTrigger) {{
+      setTimeout(runTourAnimation, 400);
+    }}
   </script>
 </body>
 </html>
 """
 
-# Render the HTML component within Streamlit
-st.components.v1.html(html_content, height=380, scrolling=True)
+if view_mode == "Orbit":
+    st.components.v1.html(orbit_html, height=520, scrolling=False)
+else:
+    st.components.v1.html(timeline_html, height=400, scrolling=True)
