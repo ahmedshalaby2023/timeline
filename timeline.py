@@ -151,13 +151,25 @@ with st.sidebar:
         ]
         export_df = pd.DataFrame(export_rows)
         excel_buffer = BytesIO()
-        export_df.to_excel(excel_buffer, index=False)
-        st.download_button(
-            label="Download events.xlsx",
-            data=excel_buffer.getvalue(),
-            file_name="timeline_events.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        try:
+            export_df.to_excel(excel_buffer, index=False, engine="openpyxl")
+        except ModuleNotFoundError:
+            excel_buffer = BytesIO()
+            try:
+                export_df.to_excel(excel_buffer, index=False, engine="xlsxwriter")
+            except ModuleNotFoundError:
+                st.error(
+                    "Excel export requires the 'openpyxl' or 'XlsxWriter' package."
+                )
+                excel_buffer = None
+
+        if excel_buffer is not None:
+            st.download_button(
+                label="Download events.xlsx",
+                data=excel_buffer.getvalue(),
+                file_name="timeline_events.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
     else:
         st.info("Add events to enable exporting.")
 
