@@ -1,8 +1,10 @@
 import streamlit as st
 import datetime
 import json
-import random
 import base64
+import importlib.util
+import subprocess
+import sys
 from io import BytesIO
 from uuid import uuid4
 import pandas as pd
@@ -15,6 +17,30 @@ def rerun_app():
     rerun_fn()
 
 DEFAULT_TITLE = "Interactive Event Timeline with Lens Magnifier"
+
+
+@st.cache_resource
+def ensure_excel_engine():
+    """Ensure an Excel writer engine is available, attempting on-the-fly install if needed."""
+    preferred_engines = ("openpyxl", "xlsxwriter")
+
+    for engine in preferred_engines:
+        if importlib.util.find_spec(engine) is not None:
+            return engine
+
+    missing = [engine for engine in preferred_engines if importlib.util.find_spec(engine) is None]
+    if missing:
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+        except Exception as exc:
+            st.warning(f"Automatic install of Excel export dependencies failed: {exc}")
+            return None
+
+    for engine in preferred_engines:
+        if importlib.util.find_spec(engine) is not None:
+            return engine
+
+    return None
 
 st.set_page_config(page_title="Event Timeline Lens", page_icon="⏱️", layout="wide")
 
@@ -151,15 +177,21 @@ with st.sidebar:
         ]
         export_df = pd.DataFrame(export_rows)
         excel_buffer = BytesIO()
-        try:
-            export_df.to_excel(excel_buffer, index=False, engine="openpyxl")
-        except ModuleNotFoundError:
-            excel_buffer = BytesIO()
+
+        engine = ensure_excel_engine()
+        if engine is None:
+            st.error(
+                "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
+                "Please install one of them in the deployment environment."
+            )
+            excel_buffer = None
+        else:
             try:
-                export_df.to_excel(excel_buffer, index=False, engine="xlsxwriter")
+                export_df.to_excel(excel_buffer, index=False, engine=engine)
             except ModuleNotFoundError:
                 st.error(
-                    "Excel export requires the 'openpyxl' or 'XlsxWriter' package."
+                    "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
+                    "Please install one of them in the deployment environment."
                 )
                 excel_buffer = None
 
