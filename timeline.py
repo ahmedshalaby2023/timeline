@@ -3,6 +3,7 @@ import datetime
 import json
 import random
 import base64
+from io import BytesIO
 from uuid import uuid4
 import pandas as pd
 
@@ -133,13 +134,43 @@ with st.sidebar:
                 st.session_state['events'].pop(idx)
                 rerun_app()
 
+    st.markdown("---")
+    st.subheader("Export Events to Excel")
+    if st.session_state["events"]:
+        sorted_export = sorted(
+            st.session_state["events"],
+            key=lambda e: datetime.date.fromisoformat(e["date"]),
+        )
+        export_rows = [
+            {
+                "eventname": ev["title"],
+                "eventdate": ev["date"],
+                "image": ev.get("image"),
+            }
+            for ev in sorted_export
+        ]
+        export_df = pd.DataFrame(export_rows)
+        excel_buffer = BytesIO()
+        export_df.to_excel(excel_buffer, index=False)
+        st.download_button(
+            label="Download events.xlsx",
+            data=excel_buffer.getvalue(),
+            file_name="timeline_events.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.info("Add events to enable exporting.")
+
 # If no events, prompt the user and stop
 if not st.session_state["events"]:
     st.info("Use the sidebar to add events. They will appear in a colorful, animated timeline!")
     st.stop()
 
-# Sort events chronologically
-sorted_events = sorted(st.session_state["events"], key=lambda e: e["date"])
+# Sort events chronologically (oldest first)
+sorted_events = sorted(
+    st.session_state["events"],
+    key=lambda e: datetime.date.fromisoformat(e["date"]),
+)
 
 # Serialize to JSON for JavaScript
 events_json = json.dumps(sorted_events)
@@ -350,6 +381,7 @@ html_content = f"""
   <script>
     // Event data from Streamlit
     const events = {events_json};
+    events.sort((a, b) => new Date(a.date) - new Date(b.date));
     const wrapper = document.getElementById('timeline-wrapper');
     const eventElements = [];
 
