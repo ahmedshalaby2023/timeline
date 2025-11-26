@@ -42,7 +42,12 @@ def ensure_excel_engine():
 
     return None
 
-st.set_page_config(page_title="Event Timeline Lens", page_icon="⏱️", layout="wide")
+st.set_page_config(
+    page_title="Event Timeline Lens",
+    page_icon="⏱️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 if "timeline_title" not in st.session_state:
     st.session_state["timeline_title"] = DEFAULT_TITLE
