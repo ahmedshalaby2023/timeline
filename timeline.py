@@ -176,7 +176,7 @@ with st.sidebar:
 
     st.header("Add a New Event")
     title_input = st.text_input("Event Title")
-    date_input = st.date_input("Event Date", datetime.date(2002, 1, 1), min_value=datetime.date(2002, 1, 1))
+    date_input = st.date_input("Event Date", datetime.date(2002, 1, 1), min_value=datetime.date(2002, 1, 1), max_value=datetime.date.today())
     image_file = st.file_uploader("Upload an image (optional)", type=["png", "jpg", "jpeg", "gif"])
     image_data = None
     if image_file:
@@ -199,49 +199,107 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Import Events from Excel")
+    st.info("Excel file must contain columns named 'eventname' and 'eventdate' (case-insensitive)")
     excel_file = st.file_uploader("Upload Excel file", type=["xlsx", "xls", "xlsb"], key="excel_uploader")
     if excel_file:
         try:
             ext = excel_file.name.split(".")[-1].lower()
             read_kwargs = {}
             if ext == "xlsb":
+                if importlib.util.find_spec("pyxlsb") is None:
+                    st.error("pyxlsb package is required for .xlsb files. Please install it with: pip install pyxlsb")
+                    st.stop()
                 read_kwargs["engine"] = "pyxlsb"
+            
+            st.info(f"Reading Excel file: {excel_file.name}")
             df = pd.read_excel(excel_file, **read_kwargs)
+            
+            # Show file info
+            st.write(f"Found {len(df)} rows in Excel file")
+            st.write("Columns found:", df.columns.tolist())
+            
             missing_cols = {"eventname", "eventdate"} - set(col.lower() for col in df.columns)
             if missing_cols:
-                st.error("Excel file must contain columns: eventname, eventdate")
+                st.error(f"Excel file must contain columns: eventname, eventdate. Missing: {missing_cols}")
+                st.write("Available columns:", [col for col in df.columns])
             else:
                 normalized = {col.lower(): col for col in df.columns}
                 new_events = []
-                for _, row in df.iterrows():
+                skipped_count = 0
+                duplicate_count = 0
+                
+                # Get existing events for duplicate checking
+                existing_events = set()
+                for ev in st.session_state["events"]:
+                    key = (ev["title"].lower().strip(), ev["date"])
+                    existing_events.add(key)
+                
+                for idx, row in df.iterrows():
                     name = row[normalized["eventname"]]
                     date_val = row[normalized["eventdate"]]
+                    
                     if pd.isna(name) or pd.isna(date_val):
+                        skipped_count += 1
                         continue
-                    if isinstance(date_val, datetime.date):
-                        date_iso = date_val.isoformat()
-                    else:
-                        try:
+                        
+                    try:
+                        # Handle pandas Timestamp objects (most common from Excel)
+                        if hasattr(date_val, 'date'):
+                            parsed_date = date_val.date()
+                        # Handle datetime objects
+                        elif isinstance(date_val, datetime.datetime):
+                            parsed_date = date_val.date()
+                        # Handle date objects
+                        elif isinstance(date_val, datetime.date):
+                            parsed_date = date_val
+                        # Handle string dates
+                        else:
                             parsed_date = pd.to_datetime(date_val).date()
-                            date_iso = parsed_date.isoformat()
-                        except Exception:
+                        
+                        # Validate minimum date constraint
+                        if parsed_date < datetime.date(2002, 1, 1):
+                            st.warning(f"Row {idx+1}: Skipping event '{name}' - date {parsed_date} is before minimum allowed date (2002-01-01)")
+                            skipped_count += 1
                             continue
+                            
+                        date_iso = parsed_date.isoformat()
+                    except Exception as e:
+                        st.warning(f"Row {idx+1}: Skipping event '{name}' - invalid date format: {date_val}")
+                        skipped_count += 1
+                        continue
+                    
+                    # Check for duplicates
+                    event_key = (str(name).lower().strip(), date_iso)
+                    if event_key in existing_events:
+                        duplicate_count += 1
+                        continue
+                        
+                    existing_events.add(event_key)
+                        
                     new_events.append(
                         {
                             "id": str(uuid4()),
-                            "title": str(name),
+                            "title": str(name).strip(),
                             "date": date_iso,
                             "image": None,
                         }
                     )
+                
                 if new_events:
                     st.session_state["events"].extend(new_events)
-                    st.success(f"Imported {len(new_events)} events from Excel.")
-                    rerun_app()
+                    st.success(f"Successfully imported {len(new_events)} events from Excel.")
+                    if skipped_count > 0:
+                        st.info(f"Skipped {skipped_count} rows due to missing data or invalid dates")
+                    if duplicate_count > 0:
+                        st.info(f"Skipped {duplicate_count} duplicate events that already exist")
+                    # Clear the file uploader to prevent re-importing on rerun
+                    st.session_state["excel_uploader"] = None
+                    st.rerun()
                 else:
-                    st.warning("No valid rows found to import.")
+                    st.warning("No valid rows found to import. Check that your Excel file has proper eventname and eventdate columns.")
         except Exception as exc:
             st.error(f"Failed to read Excel file: {exc}")
+            st.write("Please ensure your Excel file is not corrupted and has the correct format.")
 
 # Editing existing events
 with st.sidebar:
@@ -253,7 +311,8 @@ with st.sidebar:
                 f"Date_{ev['id']}",
                 datetime.date.fromisoformat(ev['date']),
                 key=f"date_{ev['id']}_edit",
-                min_value=datetime.date(2002, 1, 1)
+                min_value=datetime.date(2002, 1, 1),
+                max_value=datetime.date.today()
             )
             new_image_file = st.file_uploader(
                 "Replace image (optional)",
