@@ -174,6 +174,20 @@ with st.sidebar:
     )
     st.session_state["lens_size"] = lens_size
 
+    # Lens magnification duration
+    if "lens_duration" not in st.session_state:
+        st.session_state["lens_duration"] = 0.5
+    
+    lens_duration = st.slider(
+        "Magnification Delay (seconds)",
+        min_value=0.0,
+        max_value=3.0,
+        value=st.session_state["lens_duration"],
+        step=0.1,
+        help="Delay before magnification effect when event enters the lens."
+    )
+    st.session_state["lens_duration"] = lens_duration
+
     st.header("Add a New Event")
     title_input = st.text_input("Event Title")
     date_input = st.date_input("Event Date", datetime.date(2002, 1, 1), min_value=datetime.date(2002, 1, 1), max_value=datetime.date.today())
@@ -392,6 +406,10 @@ sorted_events = sorted(
 events_json = json.dumps(sorted_events)
 view_mode = st.session_state["timeline_view"]
 
+# Show warning for too many events in orbit mode
+if view_mode == "Orbit" and len(sorted_events) > 40:
+    st.warning(f"⚠️ You have {len(sorted_events)} events in orbit mode. For better visibility, consider switching to Timeline mode or reducing the number of events to under 40.")
+
 # HTML + CSS + JavaScript for the timeline
 orbit_html = f"""
 <!DOCTYPE html>
@@ -458,7 +476,7 @@ orbit_html = f"""
       color: #ffffff;
       pointer-events: auto;
       transform: translate(-50%, -50%) scale(0.82);
-      transition: left 0.6s ease, top 0.6s ease, transform 0.4s ease;
+      transition: left 0.6s ease, top 0.6s ease, transform 0.4s ease, width 0.3s ease;
       z-index: 40;
     }}
 
@@ -474,7 +492,30 @@ orbit_html = f"""
       justify-content: center;
       overflow: hidden;
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-      transition: border-color 0.35s ease, box-shadow 0.35s ease;
+      transition: border-color 0.35s ease, box-shadow 0.35s ease, width 0.3s ease, height 0.3s ease;
+      position: relative;
+    }}
+
+    .event .bubble::before {{
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: var(--color);
+      filter: blur(25px);
+      opacity: 0.75;
+      transform: scale(1.2);
+      transition: opacity 0.35s ease;
+      pointer-events: none;
+    }}
+
+    .event .bubble::after {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(150deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.25) 55%, rgba(255, 255, 255, 0.05) 100%);
+      opacity: 0.9;
+      transition: opacity 0.35s ease;
+      pointer-events: none;
     }}
 
     .event .bubble img {{
@@ -494,6 +535,7 @@ orbit_html = f"""
       white-space: normal;
       word-wrap: break-word;
       line-height: 1.2;
+      transition: font-size 0.3s ease;
     }}
 
     .event .date {{
@@ -501,11 +543,12 @@ orbit_html = f"""
       font-size: {st.session_state["event_date_size"]}px;
       color: {st.session_state["event_date_color"]};
       font-family: {st.session_state["event_date_font"]};
+      transition: font-size 0.3s ease;
     }}
 
     .event.tour-highlight {{
       z-index: 60;
-      transform: translate(-50%, -50%) scale(1.2);
+      transform: translate(-50%, -50%) translateY(-80px) scale(2.0);
     }}
 
     .event.tour-highlight .bubble {{
@@ -513,9 +556,23 @@ orbit_html = f"""
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
     }}
 
+    .event.tour-highlight .bubble::before,
+    .event.tour-highlight .bubble::after {{
+      opacity: 0;
+    }}
+
+    .event.tour-highlight .bubble img {{
+      filter: saturate(1);
+      opacity: 1;
+    }}
+
     .event.tour-highlight .label {{
       color: #ffffff;
       text-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+    }}
+
+    .event.tour-highlight .date {{
+      color: rgba(255, 255, 255, 0.75);
     }}
 
     #lens {{
@@ -523,7 +580,7 @@ orbit_html = f"""
       width: {st.session_state["lens_size"]}px;
       height: {st.session_state["lens_size"]}px;
       border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.6);
+      border: 2px solid transparent;
       background: transparent;
       background-color: transparent !important;
       mix-blend-mode: normal;
@@ -531,7 +588,7 @@ orbit_html = f"""
       box-shadow: none;
       pointer-events: none;
       transform: translate(-50%, -50%);
-      transition: left 0.6s ease, top 0.6s ease, opacity 0.6s ease;
+      transition: opacity 0.6s ease;
       z-index: 5;
       opacity: 0;
       overflow: visible;
@@ -558,6 +615,7 @@ orbit_html = f"""
     const lens = document.getElementById('lens');
     const eventElements = [];
     const baseAngles = [];
+    const magnificationTimeouts = new Map();
 
     events.forEach((ev, idx) => {{
       const eventDiv = document.createElement('div');
@@ -578,6 +636,42 @@ orbit_html = f"""
         <div class="label">${{ev.title}}</div>
         <div class="date">${{dateLabel}}</div>
       `;
+
+      eventDiv.addEventListener('mouseenter', () => {{
+        // Clear any existing timeout for this event
+        if (magnificationTimeouts.has(eventDiv.dataset.index)) {{
+          clearTimeout(magnificationTimeouts.get(eventDiv.dataset.index));
+          magnificationTimeouts.delete(eventDiv.dataset.index);
+        }}
+        
+        // Set a timeout to add the tour-highlight class after the specified delay
+        const timeoutId = setTimeout(() => {{
+          focusEvent(eventDiv);
+          magnificationTimeouts.delete(eventDiv.dataset.index);
+        }}, {st.session_state["lens_duration"]} * 1000);
+        
+        magnificationTimeouts.set(eventDiv.dataset.index, timeoutId);
+      }});
+
+      eventDiv.addEventListener('mouseleave', () => {{
+        // Clear any pending timeout and immediately remove highlight
+        if (magnificationTimeouts.has(eventDiv.dataset.index)) {{
+          clearTimeout(magnificationTimeouts.get(eventDiv.dataset.index));
+          magnificationTimeouts.delete(eventDiv.dataset.index);
+        }}
+        
+        focusOverview();
+      }});
+
+      eventDiv.addEventListener('click', () => {{
+        // Clear any pending timeout and immediately focus
+        if (magnificationTimeouts.has(eventDiv.dataset.index)) {{
+          clearTimeout(magnificationTimeouts.get(eventDiv.dataset.index));
+          magnificationTimeouts.delete(eventDiv.dataset.index);
+        }}
+        
+        focusEvent(eventDiv);
+      }});
 
       eventsHost.appendChild(eventDiv);
       eventElements.push(eventDiv);
@@ -615,46 +709,116 @@ orbit_html = f"""
         lens.classList.remove('visible');
         return;
       }}
-      const lensOffset = orbitRadius * 0.75;
+      // Position lens at the center of the orbit
       lens.style.left = `${{center.x}}px`;
-      lens.style.top = `${{center.y - lensOffset}}px`;
+      lens.style.top = `${{center.y}}px`;
       lens.classList.add('visible');
     }}
 
     function recalcGeometry() {{
       const rect = orbitContainer.getBoundingClientRect();
       const size = Math.min(rect.width, rect.height);
-      orbitRadius = eventElements.length ? Math.max(size / 2 - 110, size / 4) : 0;
+      const eventCount = eventElements.length;
+      
+      // Dynamic orbit radius based on event count
+      let baseRadius;
+      if (eventCount <= 8) {{
+        baseRadius = size / 2 - 110;
+      }} else if (eventCount <= 15) {{
+        baseRadius = size / 2 - 90;
+      }} else if (eventCount <= 25) {{
+        baseRadius = size / 2 - 70;
+      }} else if (eventCount <= 40) {{
+        baseRadius = size / 2 - 50;
+      }} else {{
+        baseRadius = size / 2 - 30;
+      }}
+      
+      // Ensure minimum radius for very crowded orbits
+      orbitRadius = eventCount ? Math.max(baseRadius, size / 3) : 0;
       center = {{ x: rect.width / 2, y: rect.height / 2 }};
       updateLensPosition();
       renderOrbit(currentOffset);
+      
+      // Adjust event sizes based on count
+      adjustEventSizes(eventCount);
     }}
 
     function focusEvent(el) {{
       if (!el) {{
         return;
       }}
-      const baseAngle = parseFloat(el.dataset.baseAngle);
-      const offset = TOP_ALIGNMENT - baseAngle;
+      
+      // Move the event to the center of the orbit (where the lens is)
+      const targetAngle = -Math.PI / 2; // Top position (center)
+      const offset = targetAngle - parseFloat(el.dataset.baseAngle);
+      
+      // Apply the rotation to bring the event to center
       renderOrbit(offset);
-      orbitContainer.style.transform = 'scale(1.2) translateY(-14px)';
+      
+      // Add highlight and magnification effects
+      el.classList.add('tour-highlight');
+      
+      // Scale the entire orbit slightly for better focus
+      orbitContainer.style.transform = 'scale(1.1)';
     }}
 
     function focusOverview() {{
+      eventElements.forEach(el => {{
+        el.classList.remove('tour-highlight');
+      }});
       renderOrbit(0);
-      orbitContainer.style.transform = 'scale(1) translateY(0px)';
+      orbitContainer.style.transform = 'scale(1)';
     }}
 
 
-    eventElements.forEach(el => {{
-      el.addEventListener('mouseenter', () => {{
-        focusEvent(el);
+    function adjustEventSizes(eventCount) {{
+      let scale, width, fontSize;
+      
+      if (eventCount <= 8) {{
+        scale = 0.82;
+        width = 120;
+        fontSize = 12;
+      }} else if (eventCount <= 15) {{
+        scale = 0.75;
+        width = 100;
+        fontSize = 10;
+      }} else if (eventCount <= 25) {{
+        scale = 0.65;
+        width = 85;
+        fontSize = 9;
+      }} else if (eventCount <= 40) {{
+        scale = 0.55;
+        width = 70;
+        fontSize = 8;
+      }} else {{
+        scale = 0.45;
+        width = 60;
+        fontSize = 7;
+      }}
+      
+      eventElements.forEach(el => {{
+        el.style.transform = `translate(-50%, -50%) scale(${{scale}})`;
+        el.style.width = `${{width}}px`;
+        
+        const bubble = el.querySelector('.bubble');
+        if (bubble) {{
+          const bubbleSize = Math.max(40, width * 0.6);
+          bubble.style.width = `${{bubbleSize}}px`;
+          bubble.style.height = `${{bubbleSize}}px`;
+        }}
+        
+        const label = el.querySelector('.label');
+        if (label) {{
+          label.style.fontSize = `${{fontSize}}px`;
+        }}
+        
+        const date = el.querySelector('.date');
+        if (date) {{
+          date.style.fontSize = `${{fontSize - 1}}px`;
+        }}
       }});
-      el.addEventListener('click', () => {{
-        focusEvent(el);
-      }});
-    }});
-
+    }}
 
     function handleResize() {{
       recalcGeometry();
@@ -686,17 +850,17 @@ timeline_html = f"""
 
     #lens {{
       position: fixed;
-      top: 20px;
+      top: 80px;
       left: 50%;
       transform: translateX(-50%);
       width: {st.session_state["lens_size"]}px;
       height: {st.session_state["lens_size"]}px;
       border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.6);
+      border: 2px solid transparent;
       background: transparent;
       background-color: transparent !important;
       mix-blend-mode: normal;
-      filtered: none;
+      filter: none;
       box-shadow: none;
       pointer-events: none;
       z-index: 1000;
@@ -714,7 +878,7 @@ timeline_html = f"""
       overflow-x: auto;
       overflow-y: hidden;
       white-space: nowrap;
-      padding: 30px 50vw 60px;
+      padding: 180px 50vw 60px;
       box-sizing: border-box;
       scroll-behavior: smooth;
       -ms-overflow-style: none;
@@ -731,7 +895,7 @@ timeline_html = f"""
       margin: 0 60px;
       text-align: center;
       color: #ffffff;
-      transition: transform 0.35s ease, box-shadow 0.35s ease;
+      transition: transform 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55), box-shadow 0.35s ease;
       transform-origin: center center;
       transform: translateY(0) scale(1);
       z-index: 1500;
@@ -801,13 +965,12 @@ timeline_html = f"""
       margin-top: 4px;
       font-size: {st.session_state["event_date_size"]}px;
       color: {st.session_state["event_date_color"]};
-      font-family: {st.session_state["event_date_font"]};
       letter-spacing: 0.4px;
       transition: color 0.35s ease;
     }}
 
     .event.focused {{
-      transform: scale(2.0);
+      transform: scale(2.5);
       z-index: 10;
     }}
 
@@ -829,7 +992,7 @@ timeline_html = f"""
 
 
     .event.hovering {{
-      transform: translateY(-28px) scale(calc({st.session_state["lens_size"]} / 120));
+      transform: translateY(-140px) scale(calc({st.session_state["lens_size"]} / 90));
       z-index: 2000;
     }}
 
@@ -847,10 +1010,9 @@ timeline_html = f"""
     }}
 
     .event.hovering.focused {{
-      transform: translateY(-28px) scale(calc({st.session_state["lens_size"]} / 80));
+      transform: translateY(-140px) scale(calc({st.session_state["lens_size"]} / 60));
       z-index: 2500;
     }}
-
 
     @keyframes tremor {{
       0%, 100% {{ transform: scale(1.12) translate(0px, 0px); }}
@@ -870,6 +1032,7 @@ timeline_html = f"""
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
     const wrapper = document.getElementById('timeline-wrapper');
     const eventElements = [];
+    const magnificationTimeouts = new Map();
 
     events.forEach((ev, idx) => {{
       const eventDiv = document.createElement('div');
@@ -891,12 +1054,30 @@ timeline_html = f"""
       `;
 
       eventDiv.addEventListener('mouseenter', () => {{
-        eventDiv.classList.add('hovering');
-        const targetScroll = getScrollLeftForEvent(eventDiv);
-        wrapper.scrollTo({{ left: targetScroll, behavior: 'smooth' }});
+        // Clear any existing timeout for this event
+        if (magnificationTimeouts.has(eventDiv.dataset.id)) {{
+          clearTimeout(magnificationTimeouts.get(eventDiv.dataset.id));
+          magnificationTimeouts.delete(eventDiv.dataset.id);
+        }}
+        
+        // Set a timeout to add the hovering class after the specified delay
+        const timeoutId = setTimeout(() => {{
+          eventDiv.classList.add('hovering');
+          const targetScroll = getScrollLeftForEvent(eventDiv);
+          wrapper.scrollTo({{ left: targetScroll, behavior: 'smooth' }});
+          magnificationTimeouts.delete(eventDiv.dataset.id);
+        }}, {st.session_state["lens_duration"]} * 1000);
+        
+        magnificationTimeouts.set(eventDiv.dataset.id, timeoutId);
       }});
 
       eventDiv.addEventListener('mouseleave', () => {{
+        // Clear any pending timeout and immediately remove hovering
+        if (magnificationTimeouts.has(eventDiv.dataset.id)) {{
+          clearTimeout(magnificationTimeouts.get(eventDiv.dataset.id));
+          magnificationTimeouts.delete(eventDiv.dataset.id);
+        }}
+        
         eventDiv.classList.remove('hovering');
       }});
 
@@ -918,7 +1099,7 @@ timeline_html = f"""
         const rect = el.getBoundingClientRect();
         const center = rect.left + rect.width / 2;
         const lensRadius = {st.session_state["lens_size"]} / 2;
-        if (Math.abs(center - lensX) < lensRadius * 0.6) {{
+        if (Math.abs(center - lensX) < lensRadius * 0.8) {{
           el.classList.add('focused');
         }} else {{
           el.classList.remove('focused');
