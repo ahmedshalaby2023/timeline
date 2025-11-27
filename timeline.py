@@ -60,24 +60,9 @@ if "timeline_view" not in st.session_state:
 if "events" not in st.session_state:
     st.session_state["events"] = []
 
-if "tour_trigger" not in st.session_state:
-    st.session_state["tour_trigger"] = False
 
 st.title(st.session_state["timeline_title"])
 
-tour_trigger = False
-if st.session_state["events"]:
-    if st.button(
-        "Play Prezi-style Tour",
-        use_container_width=True,
-        help="Animate the timeline with dynamic zoom-and-pan transitions."
-    ):
-        st.session_state["tour_trigger"] = True
-
-    tour_trigger = st.session_state["tour_trigger"]
-    st.session_state["tour_trigger"] = False
-else:
-    st.session_state["tour_trigger"] = False
 
 # Sidebar for data entry
 with st.sidebar:
@@ -94,6 +79,100 @@ with st.sidebar:
         value=st.session_state.get("timeline_title", DEFAULT_TITLE),
         help="Displayed at the top of the timeline."
     ) or DEFAULT_TITLE
+
+    # Background color picker for horizontal timeline
+    if "timeline_bg_color" not in st.session_state:
+        st.session_state["timeline_bg_color"] = "#fefcea"
+    
+    timeline_bg_color = st.color_picker(
+        "Timeline Background Color",
+        value=st.session_state["timeline_bg_color"],
+        help="Set the background color for the horizontal timeline view."
+    )
+    st.session_state["timeline_bg_color"] = timeline_bg_color
+
+    # Event title styling options
+    if "event_title_color" not in st.session_state:
+        st.session_state["event_title_color"] = "#ffffff"
+    
+    if "event_title_font" not in st.session_state:
+        st.session_state["event_title_font"] = "Arial"
+    
+    if "event_title_size" not in st.session_state:
+        st.session_state["event_title_size"] = 12
+    
+    st.markdown("### Event Title Styling")
+    
+    event_title_color = st.color_picker(
+        "Title Color",
+        value=st.session_state["event_title_color"],
+        help="Set the color of event titles."
+    )
+    st.session_state["event_title_color"] = event_title_color
+    
+    event_title_font = st.selectbox(
+        "Title Font",
+        options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
+        index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_title_font"]),
+        help="Choose the font for event titles."
+    )
+    st.session_state["event_title_font"] = event_title_font
+    
+    event_title_size = st.slider(
+        "Title Size (px)",
+        min_value=8,
+        max_value=24,
+        value=st.session_state["event_title_size"],
+        help="Set the font size for event titles in pixels."
+    )
+    st.session_state["event_title_size"] = event_title_size
+
+    # Event date styling options
+    if "event_date_color" not in st.session_state:
+        st.session_state["event_date_color"] = "#ffffff"
+    
+    if "event_date_font" not in st.session_state:
+        st.session_state["event_date_font"] = "Arial"
+    
+    if "event_date_size" not in st.session_state:
+        st.session_state["event_date_size"] = 10
+    
+    event_date_color = st.color_picker(
+        "Date Color",
+        value=st.session_state["event_date_color"],
+        help="Set the color of event dates."
+    )
+    st.session_state["event_date_color"] = event_date_color
+    
+    event_date_font = st.selectbox(
+        "Date Font",
+        options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
+        index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_date_font"]),
+        help="Choose the font for event dates."
+    )
+    st.session_state["event_date_font"] = event_date_font
+    
+    event_date_size = st.slider(
+        "Date Size (px)",
+        min_value=6,
+        max_value=18,
+        value=st.session_state["event_date_size"],
+        help="Set the font size for event dates in pixels."
+    )
+    st.session_state["event_date_size"] = event_date_size
+
+    # Lens styling options
+    if "lens_size" not in st.session_state:
+        st.session_state["lens_size"] = 240
+    
+    lens_size = st.slider(
+        "Lens Size (px)",
+        min_value=120,
+        max_value=400,
+        value=st.session_state["lens_size"],
+        help="Set the size of the lens in pixels."
+    )
+    st.session_state["lens_size"] = lens_size
 
     st.header("Add a New Event")
     title_input = st.text_input("Event Title")
@@ -253,7 +332,6 @@ sorted_events = sorted(
 # Serialize to JSON for JavaScript
 events_json = json.dumps(sorted_events)
 view_mode = st.session_state["timeline_view"]
-tour_js_flag = "true" if tour_trigger else "false"
 
 # HTML + CSS + JavaScript for the timeline
 orbit_html = f"""
@@ -266,41 +344,17 @@ orbit_html = f"""
       margin: 0;
       position: relative;
       font-family: Arial, sans-serif;
-      background: radial-gradient(circle at 15% 15%, #fefcea 0%, #f1da36 25%, #f0b800 55%, #f09900 100%);
+      background: {st.session_state["timeline_bg_color"]};
       overflow: hidden;
-    }}
-
-    #fog {{
-      position: absolute;
-      inset: -25%;
-      pointer-events: none;
-      z-index: 50;
-      background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0.28) 220px, rgba(189, 206, 223, 0.6) 100%);
-      filter: blur(12px);
-      opacity: 0.75;
-    }}
-
-    #timeline-stage {{
-      position: relative;
-      width: 100%;
-      height: 100%;
-      min-height: 420px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 1.2s cubic-bezier(0.17, 0.84, 0.44, 1);
-      transform-origin: center center;
-      will-change: transform;
-      z-index: 100;
     }}
 
     #orbit-container {{
       position: relative;
-      width: min(90vw, 620px);
-      height: min(90vw, 620px);
-      max-width: 640px;
-      max-height: 640px;
-      aspect-ratio: 1;
+      width: 100%;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+      aspect-ratio: auto;
     }}
 
     #orbit-ring {{
@@ -335,6 +389,7 @@ orbit_html = f"""
     #orbit-events {{
       position: absolute;
       inset: 0;
+      z-index: 30;
     }}
 
     .event {{
@@ -345,6 +400,7 @@ orbit_html = f"""
       pointer-events: auto;
       transform: translate(-50%, -50%) scale(0.82);
       transition: left 0.6s ease, top 0.6s ease, transform 0.4s ease;
+      z-index: 40;
     }}
 
     .event .bubble {{
@@ -373,17 +429,23 @@ orbit_html = f"""
       margin-top: 10px;
       font-weight: 600;
       letter-spacing: 0.4px;
-      color: rgba(255, 255, 255, 0.8);
+      color: {st.session_state["event_title_color"]};
+      font-family: {st.session_state["event_title_font"]};
+      font-size: {st.session_state["event_title_size"]}px;
+      white-space: normal;
+      word-wrap: break-word;
+      line-height: 1.2;
     }}
 
     .event .date {{
       margin-top: 4px;
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.55);
+      font-size: {st.session_state["event_date_size"]}px;
+      color: {st.session_state["event_date_color"]};
+      font-family: {st.session_state["event_date_font"]};
     }}
 
     .event.tour-highlight {{
-      z-index: 20;
+      z-index: 60;
       transform: translate(-50%, -50%) scale(1.2);
     }}
 
@@ -399,17 +461,21 @@ orbit_html = f"""
 
     #lens {{
       position: absolute;
-      width: 220px;
-      height: 220px;
+      width: {st.session_state["lens_size"]}px;
+      height: {st.session_state["lens_size"]}px;
       border-radius: 50%;
-      border: 3px solid rgba(255, 255, 255, 0.95);
-      background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0) 100%);
-      box-shadow: 0 0 25px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(255, 255, 255, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      background: transparent;
+      background-color: transparent !important;
+      mix-blend-mode: normal;
+      filter: none;
+      box-shadow: none;
       pointer-events: none;
       transform: translate(-50%, -50%);
       transition: left 0.6s ease, top 0.6s ease, opacity 0.6s ease;
-      z-index: 30;
+      z-index: 5;
       opacity: 0;
+      overflow: visible;
     }}
 
     #lens.visible {{
@@ -418,21 +484,16 @@ orbit_html = f"""
   </style>
 </head>
 <body>
-  <div id="fog"></div>
-  <div id="timeline-stage">
-    <div id="orbit-container">
+  <div id="orbit-container">
       <div id="orbit-ring"></div>
       <div id="orbit-core"></div>
       <div id="orbit-events"></div>
       <div id="lens"></div>
     </div>
-  </div>
   <script>
     const events = {events_json};
-    const tourTrigger = {tour_js_flag};
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const stage = document.getElementById('timeline-stage');
     const orbitContainer = document.getElementById('orbit-container');
     const eventsHost = document.getElementById('orbit-events');
     const lens = document.getElementById('lens');
@@ -477,12 +538,6 @@ orbit_html = f"""
     let center = {{ x: 0, y: 0 }};
     let currentOffset = 0;
 
-    function highlightEvent(target) {{
-      eventElements.forEach(el => el.classList.remove('tour-highlight'));
-      if (target) {{
-        target.classList.add('tour-highlight');
-      }}
-    }}
 
     function renderOrbit(offset = currentOffset) {{
       currentOffset = offset;
@@ -516,32 +571,21 @@ orbit_html = f"""
       renderOrbit(currentOffset);
     }}
 
-    function focusEvent(el, {{ highlight = true }} = {{}}) {{
+    function focusEvent(el) {{
       if (!el) {{
         return;
       }}
       const baseAngle = parseFloat(el.dataset.baseAngle);
       const offset = TOP_ALIGNMENT - baseAngle;
       renderOrbit(offset);
-      if (highlight) {{
-        highlightEvent(el);
-      }}
-      stage.style.transform = 'scale(1.2) translateY(-14px)';
+      orbitContainer.style.transform = 'scale(1.2) translateY(-14px)';
     }}
 
     function focusOverview() {{
       renderOrbit(0);
-      highlightEvent(null);
-      stage.style.transform = 'scale(1) translateY(0px)';
+      orbitContainer.style.transform = 'scale(1) translateY(0px)';
     }}
 
-    let tourScenes = [];
-    function rebuildScenes() {{
-      tourScenes = eventElements.map(el => ({{ element: el }}));
-      if (eventElements.length) {{
-        tourScenes.push({{ overview: true }});
-      }}
-    }}
 
     eventElements.forEach(el => {{
       el.addEventListener('mouseenter', () => {{
@@ -552,35 +596,6 @@ orbit_html = f"""
       }});
     }});
 
-    function runTourAnimation() {{
-      if (!tourScenes.length) {{
-        return;
-      }}
-      let index = 0;
-      const highlightDuration = 2600;
-
-      const step = () => {{
-        const scene = tourScenes[index];
-        if (!scene) return;
-
-        if (scene.overview) {{
-          focusOverview();
-        }} else {{
-          focusEvent(scene.element);
-        }}
-
-        index += 1;
-        if (index < tourScenes.length) {{
-          setTimeout(step, highlightDuration);
-        }} else {{
-          setTimeout(() => {{
-            focusOverview();
-          }}, highlightDuration);
-        }}
-      }};
-
-      setTimeout(step, 600);
-    }}
 
     function handleResize() {{
       recalcGeometry();
@@ -591,11 +606,7 @@ orbit_html = f"""
     }});
 
     recalcGeometry();
-    rebuildScenes();
     focusOverview();
-    if (tourTrigger) {{
-      setTimeout(runTourAnimation, 500);
-    }}
   </script>
 </body>
 </html>
@@ -603,27 +614,15 @@ orbit_html = f"""
 
 timeline_html = f"""
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-  <meta charset=\"UTF-8\" />
+  <meta charset="UTF-8" />
   <style>
     body {{
       margin: 0;
       font-family: Arial, sans-serif;
-      background: radial-gradient(circle at 15% 15%, #fefcea 0%, #f1da36 25%, #f0b800 55%, #f09900 100%);
+      background: {st.session_state["timeline_bg_color"]};
       overflow: hidden;
-    }}
-
-    #fog {{
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 950;
-      background: radial-gradient(circle at 50% 150px, rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 130px, rgba(218, 226, 234, 0.32) 190px, rgba(201, 210, 220, 0.6) 100%);
-      backdrop-filter: blur(6px) saturate(0.8);
-      -webkit-backdrop-filter: blur(6px) saturate(0.8);
-      mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
-      -webkit-mask: radial-gradient(circle at 50% 150px, transparent 130px, rgba(0, 0, 0, 0.9) 200px, rgba(0, 0, 0, 1) 100%);
     }}
 
     #lens {{
@@ -631,58 +630,40 @@ timeline_html = f"""
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      width: 240px;
-      height: 240px;
+      width: {st.session_state["lens_size"]}px;
+      height: {st.session_state["lens_size"]}px;
       border-radius: 50%;
-      border: 3px solid rgba(255, 255, 255, 0.95);
-      background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0.01) 70%, rgba(255, 255, 255, 0) 100%);
-      backdrop-filter: blur(0.5px) saturate(1.1);
-      box-shadow: 0 0 18px rgba(255, 255, 255, 0.45), inset 0 0 12px rgba(255, 255, 255, 0.18);
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      background: transparent;
+      background-color: transparent !important;
+      mix-blend-mode: normal;
+      filtered: none;
+      box-shadow: none;
       pointer-events: none;
       z-index: 1000;
-      overflow: hidden;
-      animation: lensPulse 5s ease-in-out infinite;
+      overflow: visible;
     }}
 
-    #lens::before {{
-      content: "";
-      position: absolute;
-      inset: 20px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.35) 25%, rgba(255, 255, 255, 0.02) 70%);
-      mix-blend-mode: screen;
-      opacity: 0.78;
-      pointer-events: none;
-    }}
-
-    @keyframes lensPulse {{
-      0%, 100% {{
-        box-shadow: 0 0 18px rgba(255, 255, 255, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.2);
-      }}
-      50% {{
-        box-shadow: 0 0 26px rgba(255, 255, 255, 0.6), inset 0 0 22px rgba(255, 255, 255, 0.26);
-      }}
-    }}
-
-    #timeline-stage {{
-      position: relative;
-      width: 100%;
-      overflow: hidden;
-      padding-top: 120px;
-      transition: transform 1.2s cubic-bezier(0.17, 0.84, 0.44, 1);
-      transform-origin: center top;
-      will-change: transform;
+    #lens::before,
+    #lens::after {{
+      content: none;
     }}
 
     #timeline-wrapper {{
       position: relative;
       width: 100%;
-      overflow-x: scroll;
+      overflow-x: auto;
       overflow-y: hidden;
       white-space: nowrap;
       padding: 30px 50vw 60px;
       box-sizing: border-box;
       scroll-behavior: smooth;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }}
+
+    #timeline-wrapper::-webkit-scrollbar {{
+      display: none;
     }}
 
     .event {{
@@ -693,6 +674,8 @@ timeline_html = f"""
       color: #ffffff;
       transition: transform 0.35s ease, box-shadow 0.35s ease;
       transform-origin: center center;
+      transform: translateY(0) scale(1);
+      z-index: 1500;
     }}
 
     .bubble {{
@@ -746,14 +729,20 @@ timeline_html = f"""
     .label {{
       margin-top: 10px;
       font-weight: bold;
-      color: rgba(255, 255, 255, 0.75);
+      color: {st.session_state["event_title_color"]};
       transition: color 0.35s ease;
+      font-family: {st.session_state["event_title_font"]};
+      font-size: {st.session_state["event_title_size"]}px;
+      white-space: normal;
+      word-wrap: break-word;
+      line-height: 1.2;
     }}
 
     .date {{
       margin-top: 4px;
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.55);
+      font-size: {st.session_state["event_date_size"]}px;
+      color: {st.session_state["event_date_color"]};
+      font-family: {st.session_state["event_date_font"]};
       letter-spacing: 0.4px;
       transition: color 0.35s ease;
     }}
@@ -779,35 +768,30 @@ timeline_html = f"""
       animation: none;
     }}
 
-    .event.tour-highlight {{
-      transform: scale(2.6) rotate(-2deg) translateY(-12px);
-      z-index: 15;
+
+    .event.hovering {{
+      transform: translateY(-28px) scale(calc({st.session_state["lens_size"]} / 120));
+      z-index: 2000;
     }}
 
-    .event.tour-highlight .bubble {{
-      border-color: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 14px 45px rgba(0, 0, 0, 0.45);
+    .event.hovering .bubble {{
+      border-color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
     }}
 
-    .event.tour-highlight .bubble::before,
-    .event.tour-highlight .bubble::after {{
-      opacity: 0;
-    }}
-
-    .event.tour-highlight .bubble img {{
-      filter: blur(0) saturate(1.1);
-      transform: scale(1);
-      animation: none;
-    }}
-
-    .event.tour-highlight .label {{
+    .event.hovering .label {{
       color: #ffffff;
-      text-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
     }}
 
-    .event.tour-highlight .date {{
-      color: rgba(255, 255, 255, 0.92);
+    .event.hovering .date {{
+      color: rgba(255, 255, 255, 0.75);
     }}
+
+    .event.hovering.focused {{
+      transform: translateY(-28px) scale(calc({st.session_state["lens_size"]} / 80));
+      z-index: 2500;
+    }}
+
 
     @keyframes tremor {{
       0%, 100% {{ transform: scale(1.12) translate(0px, 0px); }}
@@ -820,17 +804,12 @@ timeline_html = f"""
   </style>
 </head>
 <body>
-  <div id=\"fog\"></div>
-  <div id=\"lens\"></div>
-  <div id=\"timeline-stage\">
-    <div id=\"timeline-wrapper\"></div>
-  </div>
+  <div id="lens"></div>
+  <div id="timeline-wrapper"></div>
   <script>
     const events = {events_json};
-    const tourTrigger = {tour_js_flag};
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
     const wrapper = document.getElementById('timeline-wrapper');
-    const stage = document.getElementById('timeline-stage');
     const eventElements = [];
 
     events.forEach((ev, idx) => {{
@@ -852,6 +831,16 @@ timeline_html = f"""
         <div class=\"date\">${{dateLabel}}</div>
       `;
 
+      eventDiv.addEventListener('mouseenter', () => {{
+        eventDiv.classList.add('hovering');
+        const targetScroll = getScrollLeftForEvent(eventDiv);
+        wrapper.scrollTo({{ left: targetScroll, behavior: 'smooth' }});
+      }});
+
+      eventDiv.addEventListener('mouseleave', () => {{
+        eventDiv.classList.remove('hovering');
+      }});
+
       wrapper.appendChild(eventDiv);
       eventElements.push(eventDiv);
     }});
@@ -869,7 +858,8 @@ timeline_html = f"""
       document.querySelectorAll('.event').forEach(el => {{
         const rect = el.getBoundingClientRect();
         const center = rect.left + rect.width / 2;
-        if (Math.abs(center - lensX) < 120) {{
+        const lensRadius = {st.session_state["lens_size"]} / 2;
+        if (Math.abs(center - lensX) < lensRadius * 0.6) {{
           el.classList.add('focused');
         }} else {{
           el.classList.remove('focused');
@@ -888,70 +878,6 @@ timeline_html = f"""
       updateFocus();
     }});
 
-    const tourScenes = eventElements.map((el, idx) => ({{
-      element: el,
-      scale: 1.35 + (idx % 3) * 0.25,
-      rotate: (idx % 2 === 0 ? -4 : 4),
-      translateY: idx % 2 === 0 ? -14 : 10
-    }}));
-
-    if (eventElements.length) {{
-      tourScenes.push({{
-        element: null,
-        scale: 1,
-        rotate: 0,
-        translateY: 0,
-        overview: true
-      }});
-    }}
-
-    function runTourAnimation() {{
-      if (!eventElements.length) {{
-        return;
-      }}
-
-      wrapper.style.scrollBehavior = 'smooth';
-      stage.style.transform = 'scale(1) rotate(0deg) translateY(0px)';
-
-      let index = 0;
-      const highlightDuration = 2600;
-
-      const step = () => {{
-        eventElements.forEach(el => el.classList.remove('tour-highlight'));
-        const scene = tourScenes[index];
-
-        if (!scene) {{
-          return;
-        }}
-
-        if (scene.element) {{
-          const scrollLeft = getScrollLeftForEvent(scene.element);
-          wrapper.scrollTo({{ left: scrollLeft, behavior: 'smooth' }});
-          scene.element.classList.add('tour-highlight');
-        }} else {{
-          const centerScroll = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
-          wrapper.scrollTo({{ left: centerScroll, behavior: 'smooth' }});
-        }}
-
-        stage.style.transform = `scale(${{scene.scale}}) rotate(${{scene.rotate}}deg) translateY(${{scene.translateY || 0}}px)`;
-
-        index += 1;
-        if (index < tourScenes.length) {{
-          setTimeout(step, highlightDuration);
-        }} else {{
-          setTimeout(() => {{
-            eventElements.forEach(el => el.classList.remove('tour-highlight'));
-            stage.style.transform = 'scale(1) rotate(0deg) translateY(0px)';
-          }}, highlightDuration);
-        }}
-      }};
-
-      setTimeout(step, 600);
-    }}
-
-    if (tourTrigger) {{
-      setTimeout(runTourAnimation, 400);
-    }}
   </script>
 </body>
 </html>
