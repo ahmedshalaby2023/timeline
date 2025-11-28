@@ -8,7 +8,12 @@ import sys
 from io import BytesIO
 from uuid import uuid4
 import pandas as pd
-from spellchecker import SpellChecker
+try:
+    from spellchecker import SpellChecker
+    SPELLCHECKER_AVAILABLE = True
+except ImportError:
+    SPELLCHECKER_AVAILABLE = False
+    SpellChecker = None
 import streamlit.components.v1 as components
 import os
 import zipfile
@@ -26,6 +31,8 @@ DEFAULT_TITLE = "Interactive Event Timeline with Lens Magnifier"
 @st.cache_resource
 def get_spell_checker():
     """Initialize and cache a spell checker instance."""
+    if not SPELLCHECKER_AVAILABLE:
+        return None
     spell = SpellChecker()
     # Add common event-related words that might not be in the dictionary
     custom_words = {
@@ -41,6 +48,9 @@ def get_spell_checker():
 
 def check_spelling_and_suggest(text, spell_checker):
     """Check spelling of text and return suggestions for misspelled words."""
+    if not spell_checker or not SPELLCHECKER_AVAILABLE:
+        return [], []
+    
     if not text or not text.strip():
         return [], []
     
@@ -410,7 +420,7 @@ with st.sidebar:
         
         # Add spell checking for timeline title
         current_title = st.session_state.get("timeline_title", DEFAULT_TITLE)
-        if current_title and current_title != DEFAULT_TITLE:
+        if current_title and current_title != DEFAULT_TITLE and SPELLCHECKER_AVAILABLE:
             spell_checker = get_spell_checker()
             misspelled, suggestions = check_spelling_and_suggest(current_title, spell_checker)
             
@@ -537,7 +547,7 @@ with st.sidebar:
         title_input = st.text_input("Event Title")
         
         # Add spell checking for event title
-        if title_input:
+        if title_input and SPELLCHECKER_AVAILABLE:
             spell_checker = get_spell_checker()
             misspelled, suggestions = check_spelling_and_suggest(title_input, spell_checker)
             
@@ -726,7 +736,7 @@ with st.sidebar:
             new_title = st.text_input(f"Title_{ev['id']}", ev["title"], key=f"title_{ev['id']}_edit")
             
             # Add spell checking for edited event title
-            if new_title and new_title != ev["title"]:
+            if new_title and new_title != ev["title"] and SPELLCHECKER_AVAILABLE:
                 spell_checker = get_spell_checker()
                 misspelled, suggestions = check_spelling_and_suggest(new_title, spell_checker)
                 
