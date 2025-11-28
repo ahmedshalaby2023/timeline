@@ -1,0 +1,269 @@
+{
+  "save_info": {
+    "name": "last ver",
+    "created_at": "2025-11-28T06:57:11.473032",
+    "version": "1.0",
+    "event_count": 39
+  },
+  "events": [
+    {
+      "id": "549e5ce3-d309-407e-89b6-bdcdf3fc3129",
+      "title": "Joining Halwani",
+      "date": "2002-01-01",
+      "image": null
+    },
+    {
+      "id": "a40bbd4a-3d06-4f97-a50d-6d430f547f65",
+      "title": "Chemical Lab.",
+      "date": "2002-01-01",
+      "image_file": "event_1_a40bbd4a-3d06-4f97-a50d-6d430f547f65.png"
+    },
+    {
+      "id": "db5956c0-f658-4005-89d8-40223d9aecff",
+      "title": "Quality Assuarance",
+      "date": "2002-01-01",
+      "image_file": "event_2_db5956c0-f658-4005-89d8-40223d9aecff.png"
+    },
+    {
+      "id": "aec21dd4-f02e-443d-ae92-3a4b9f55022f",
+      "title": "Inventory Control",
+      "date": "2005-01-01",
+      "image": null
+    },
+    {
+      "id": "e9faa9bf-f3c3-40c0-90e3-8653bcd741eb",
+      "title": "Accounting, Banking and costing",
+      "date": "2005-01-01",
+      "image": null
+    },
+    {
+      "id": "de7d0951-cf54-4168-92ec-a9ca188ef05f",
+      "title": "SCCP",
+      "date": "2006-01-01",
+      "image": null
+    },
+    {
+      "id": "81e1dd60-b15e-4f36-9ff5-81f2de1162fe",
+      "title": "Planning SecH",
+      "date": "2007-01-07",
+      "image": null
+    },
+    {
+      "id": "82300dd9-46aa-49f3-bf99-cd654f9d619b",
+      "title": "Expansion prject",
+      "date": "2007-01-07",
+      "image_file": "event_7_82300dd9-46aa-49f3-bf99-cd654f9d619b.png"
+    },
+    {
+      "id": "d30e9275-4ae9-4d8c-b956-b6ffddfee945",
+      "title": "full customized MRP system",
+      "date": "2009-01-02",
+      "image": null
+    },
+    {
+      "id": "5f489154-7c83-4ac5-a28b-932adb164df9",
+      "title": "WHs utlization project",
+      "date": "2006-01-06",
+      "image": null
+    },
+    {
+      "id": "cc1015dd-68d2-4c2b-9e93-a0f279b187d1",
+      "title": "Demand Forecasting",
+      "date": "2007-01-01",
+      "image": null
+    },
+    {
+      "id": "dd47a883-d199-471a-90ab-0805f4ee3c78",
+      "title": "Rationalization project",
+      "date": "2008-01-01",
+      "image": null
+    },
+    {
+      "id": "509e17d5-5514-46d1-a719-ccede0f7538e",
+      "title": "3PL for Mamoul",
+      "date": "2008-01-01",
+      "image": null
+    },
+    {
+      "id": "24f50c1b-cd3c-463f-832f-c3a44884c038",
+      "title": "MS dyanics 2009",
+      "date": "2009-01-02",
+      "image": null
+    },
+    {
+      "id": "b03f6bd2-ba4d-44e2-a371-f8f672a5d984",
+      "title": "Distribution Network",
+      "date": "2009-01-02",
+      "image": null
+    },
+    {
+      "id": "8a18be7c-e041-45d1-b101-4d0d44f48fd2",
+      "title": "H1N1 Crises",
+      "date": "2009-01-02",
+      "image": null
+    },
+    {
+      "id": "f5e0df6f-adad-4709-be32-55fc47449261",
+      "title": "The 2011 Egyptian Uprising",
+      "date": "2011-01-02",
+      "image": null
+    },
+    {
+      "id": "ab1e1889-f7d0-455c-b606-06ef3b51ec3c",
+      "title": "Planning Manager",
+      "date": "2012-01-02",
+      "image_file": "event_17_ab1e1889-f7d0-455c-b606-06ef3b51ec3c.png"
+    },
+    {
+      "id": "bc0e49ab-a578-4325-adbf-7406922e1a4b",
+      "title": "Supply chain optmization",
+      "date": "2013-01-02",
+      "image": null
+    },
+    {
+      "id": "5b3b9602-2b6f-4f08-bf0f-1b1528cdaed1",
+      "title": "MBA GUC",
+      "date": "2013-01-02",
+      "image": null
+    },
+    {
+      "id": "9e2580d8-9639-452f-87ab-17b3b78680d2",
+      "title": "Andriod",
+      "date": "2014-01-02",
+      "image": null
+    },
+    {
+      "id": "36d67afa-244f-4616-b259-86679e516e16",
+      "title": "S&OP Ver1",
+      "date": "2014-01-02",
+      "image": null
+    },
+    {
+      "id": "2d2d92d8-c104-4c2a-b6a3-a3c59bb7c0f7",
+      "title": "Chicken Category",
+      "date": "2015-01-02",
+      "image": null
+    },
+    {
+      "id": "60bce9a1-c5c1-4e24-b176-fbfef75ae473",
+      "title": "Simplyfifcation and Automation Prject",
+      "date": "2016-07-08",
+      "image_file": "event_23_60bce9a1-c5c1-4e24-b176-fbfef75ae473.png"
+    },
+    {
+      "id": "aad9f25c-87f7-476a-8051-8c41abd0b346",
+      "title": "S&OP Ver2",
+      "date": "2017-07-08",
+      "image": null
+    },
+    {
+      "id": "8e9404cd-a025-4716-82a9-6f2cfb026f63",
+      "title": "C# and Java",
+      "date": "2018-07-08",
+      "image": null
+    },
+    {
+      "id": "8ce53aa8-7ee6-4866-b9f4-b43bf82cb51c",
+      "title": "Covid19",
+      "date": "2019-07-08",
+      "image": null
+    },
+    {
+      "id": "39138bbc-4ce6-48f2-b0ec-324e1670eda0",
+      "title": "S&OP Ver3",
+      "date": "2020-07-08",
+      "image": null
+    },
+    {
+      "id": "999f95c7-57aa-4940-888c-e648bdcbe5f1",
+      "title": "Supply chain excellence project",
+      "date": "2021-07-08",
+      "image": null
+    },
+    {
+      "id": "0057cfc0-6b45-401e-8868-7c387582f4af",
+      "title": "London supply chain proect",
+      "date": "2022-07-08",
+      "image": null
+    },
+    {
+      "id": "02b8cb30-ec04-47ee-a11a-286beb8656db",
+      "title": "S&OP Ver4",
+      "date": "2022-07-08",
+      "image_file": "event_30_02b8cb30-ec04-47ee-a11a-286beb8656db.png"
+    },
+    {
+      "id": "1ff9825f-0a20-4071-9883-44374189b7ed",
+      "title": "devaluation crisis",
+      "date": "2022-07-08",
+      "image": null
+    },
+    {
+      "id": "0394eb86-fcba-4761-9d2b-71db822e7b2b",
+      "title": "Delisting Mamoul Category",
+      "date": "2023-07-08",
+      "image": null
+    },
+    {
+      "id": "f0fb3897-6eb3-450f-b9a6-6e49e2471dda",
+      "title": "Co-manifuctring",
+      "date": "2023-07-08",
+      "image": null
+    },
+    {
+      "id": "6041ea34-ca0a-400a-a6c0-2f0f82390bdf",
+      "title": "Capacity optimization",
+      "date": "2023-07-08",
+      "image_file": "event_34_6041ea34-ca0a-400a-a6c0-2f0f82390bdf.png"
+    },
+    {
+      "id": "0584b885-a797-48c7-a5fc-0f8d12f07b79",
+      "title": "Productivity project",
+      "date": "2024-07-08",
+      "image_file": "event_35_0584b885-a797-48c7-a5fc-0f8d12f07b79.png"
+    },
+    {
+      "id": "576abca1-dc74-47a1-a900-496046c60b7b",
+      "title": "Cash Release project",
+      "date": "2025-07-08",
+      "image": null
+    },
+    {
+      "id": "c9c2285e-91ab-4885-a353-bc31f61ff592",
+      "title": "S&OP Ver5",
+      "date": "2025-07-08",
+      "image_file": "event_37_c9c2285e-91ab-4885-a353-bc31f61ff592.png"
+    },
+    {
+      "id": "97d63c80-f102-480c-99a9-b18af3a8bfcf",
+      "title": "End of Journey",
+      "date": "2025-11-27",
+      "image_file": "event_38_97d63c80-f102-480c-99a9-b18af3a8bfcf.png"
+    }
+  ],
+  "settings": {
+    "timeline_title": "My HB Journey",
+    "timeline_view": "Timeline",
+    "timeline_bg_color": "#7fad3f",
+    "event_title_color": "#ffffff",
+    "event_title_font": "Arial",
+    "event_title_size": 12,
+    "event_date_color": "#ffffff",
+    "event_date_font": "Arial",
+    "event_date_size": 10,
+    "lens_size": 240,
+    "lens_duration": 0.5
+  },
+  "image_files": {
+    "a40bbd4a-3d06-4f97-a50d-6d430f547f65": "event_1_a40bbd4a-3d06-4f97-a50d-6d430f547f65.png",
+    "db5956c0-f658-4005-89d8-40223d9aecff": "event_2_db5956c0-f658-4005-89d8-40223d9aecff.png",
+    "82300dd9-46aa-49f3-bf99-cd654f9d619b": "event_7_82300dd9-46aa-49f3-bf99-cd654f9d619b.png",
+    "ab1e1889-f7d0-455c-b606-06ef3b51ec3c": "event_17_ab1e1889-f7d0-455c-b606-06ef3b51ec3c.png",
+    "60bce9a1-c5c1-4e24-b176-fbfef75ae473": "event_23_60bce9a1-c5c1-4e24-b176-fbfef75ae473.png",
+    "02b8cb30-ec04-47ee-a11a-286beb8656db": "event_30_02b8cb30-ec04-47ee-a11a-286beb8656db.png",
+    "6041ea34-ca0a-400a-a6c0-2f0f82390bdf": "event_34_6041ea34-ca0a-400a-a6c0-2f0f82390bdf.png",
+    "0584b885-a797-48c7-a5fc-0f8d12f07b79": "event_35_0584b885-a797-48c7-a5fc-0f8d12f07b79.png",
+    "c9c2285e-91ab-4885-a353-bc31f61ff592": "event_37_c9c2285e-91ab-4885-a353-bc31f61ff592.png",
+    "97d63c80-f102-480c-99a9-b18af3a8bfcf": "event_38_97d63c80-f102-480c-99a9-b18af3a8bfcf.png"
+  }
+}
