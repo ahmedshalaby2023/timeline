@@ -469,6 +469,7 @@ st.markdown("""
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(102, 126, 234, 0.3);
         border-radius: 8px;
+        color: #000000;
         transition: all 0.3s ease;
     }
     
@@ -1006,6 +1007,189 @@ with st.sidebar:
         else:
             st.info("Add events to enable exporting.")
 
+        st.markdown("---")
+        st.markdown("**📄 Export as PDF**")
+        if st.session_state["events"]:
+            st.info("Generate a PDF document with your timeline events and images")
+            
+            if st.button("📄 Generate PDF"):
+                try:
+                    # Import required libraries
+                    from reportlab.lib.pagesizes import letter, A4
+                    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    from reportlab.lib.units import inch
+                    from reportlab.lib import colors
+                    from io import BytesIO
+                    import base64
+                    
+                    # Create PDF buffer
+                    pdf_buffer = BytesIO()
+                    doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
+                    
+                    # Get styles
+                    styles = getSampleStyleSheet()
+                    title_style = ParagraphStyle(
+                        'CustomTitle',
+                        parent=styles['Heading1'],
+                        fontSize=24,
+                        spaceAfter=30,
+                        textColor=colors.darkblue,
+                        alignment=1  # Center
+                    )
+                    
+                    heading_style = ParagraphStyle(
+                        'CustomHeading',
+                        parent=styles['Heading2'],
+                        fontSize=16,
+                        spaceAfter=12,
+                        textColor=colors.darkblue
+                    )
+                    
+                    # Build PDF content
+                    story = []
+                    
+                    # Title
+                    story.append(Paragraph(st.session_state.get("timeline_title", "Event Timeline"), title_style))
+                    story.append(Spacer(1, 20))
+                    
+                    # Events
+                    sorted_events = sorted(
+                        st.session_state["events"],
+                        key=lambda e: datetime.date.fromisoformat(e["date"])
+                    )
+                    
+                    for i, event in enumerate(sorted_events):
+                        # Event heading
+                        event_title = f"{event['title']} - {event['date']}"
+                        story.append(Paragraph(event_title, heading_style))
+                        
+                        # Event image if available
+                        if event.get("image"):
+                            try:
+                                # Decode base64 image
+                                image_data = base64.b64decode(event['image'])
+                                image_buffer = BytesIO(image_data)
+                                
+                                # Add image to PDF (scaled to fit)
+                                img = Image(image_buffer, width=4*inch, height=3*inch)
+                                story.append(img)
+                                story.append(Spacer(1, 12))
+                            except Exception as img_err:
+                                st.warning(f"Could not include image for event: {event['title']}")
+                        
+                        story.append(Spacer(1, 20))
+                    
+                    # Build PDF
+                    doc.build(story)
+                    
+                    # Provide download
+                    pdf_buffer.seek(0)
+                    st.download_button(
+                        label="📄 Download Timeline PDF",
+                        data=pdf_buffer.getvalue(),
+                        file_name="timeline_events.pdf",
+                        mime="application/pdf"
+                    )
+                    
+                except ImportError:
+                    st.error("""
+                    **PDF export requires additional packages.** 
+                    Please install: `pip install reportlab`
+                    """)
+                except Exception as e:
+                    st.error(f"Error generating PDF: {str(e)}")
+        else:
+            st.info("Add events to enable PDF export.")
+
+        st.markdown("---")
+        st.markdown("**📊 Export as PowerPoint**")
+        if st.session_state["events"]:
+            st.info("Create a PowerPoint presentation with your timeline events")
+            
+            if st.button("📊 Generate PowerPoint"):
+                try:
+                    # Import required libraries
+                    from pptx import Presentation
+                    from pptx.util import Inches, Pt
+                    from pptx.enum.text import PP_ALIGN
+                    from pptx.dml.color import RGBColor
+                    from io import BytesIO
+                    import base64
+                    
+                    # Create presentation
+                    prs = Presentation()
+                    
+                    # Title slide
+                    title_slide = prs.slides.add_slide(prs.slide_layouts[0])  # Title slide layout
+                    title = title_slide.shapes.title
+                    subtitle = title_slide.placeholders[1]
+                    
+                    title.text = st.session_state.get("timeline_title", "Event Timeline")
+                    subtitle.text = f"Generated on {datetime.date.today().strftime('%B %d, %Y')} • {len(st.session_state['events'])} events"
+                    
+                    # Event slides
+                    sorted_events = sorted(
+                        st.session_state["events"],
+                        key=lambda e: datetime.date.fromisoformat(e["date"])
+                    )
+                    
+                    for event in sorted_events:
+                        # Use title and content layout
+                        slide = prs.slides.add_slide(prs.slide_layouts[1])
+                        
+                        # Set title
+                        title_shape = slide.shapes.title
+                        title_shape.text = f"{event['title']}"
+                        
+                        # Add date as subtitle
+                        content_placeholder = slide.placeholders[1]
+                        content_placeholder.text = f"📅 {event['date']}"
+                        
+                        # Add image if available
+                        if event.get("image"):
+                            try:
+                                # Decode base64 image
+                                image_data = base64.b64decode(event['image'])
+                                image_buffer = BytesIO(image_data)
+                                
+                                # Add image to slide (positioned below title)
+                                left = Inches(1)
+                                top = Inches(2.5)
+                                width = Inches(8)
+                                height = Inches(4)
+                                
+                                slide.shapes.add_picture(image_buffer, left, top, width=width, height=height)
+                                
+                                # Adjust text position if image added
+                                content_placeholder.top = Inches(6.5)
+                                
+                            except Exception as img_err:
+                                st.warning(f"Could not include image for event: {event['title']}")
+                    
+                    # Save presentation to buffer
+                    pptx_buffer = BytesIO()
+                    prs.save(pptx_buffer)
+                    
+                    # Provide download
+                    pptx_buffer.seek(0)
+                    st.download_button(
+                        label="📊 Download PowerPoint Presentation",
+                        data=pptx_buffer.getvalue(),
+                        file_name="timeline_presentation.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    )
+                    
+                except ImportError:
+                    st.error("""
+                    **PowerPoint export requires additional packages.** 
+                    Please install: `pip install python-pptx`
+                    """)
+                except Exception as e:
+                    st.error(f"Error generating PowerPoint: {str(e)}")
+        else:
+            st.info("Add events to enable PowerPoint export.")
+
 # Editing existing events
 with st.sidebar:
     # ✏️ Edit Events Section (no outer expander to avoid nesting)
@@ -1237,10 +1421,11 @@ domino_html = f"""
       display: flex;
       gap: clamp(12px, 2vw, 28px);
       overflow-x: auto;
-      padding-bottom: 12px;
+      padding: 20px 0 24px 0;
       scroll-snap-type: x proximity;
       flex: 1;
       align-items: stretch;
+      min-height: 60px;
     }}
     .domino-track::-webkit-scrollbar {{
       height: 6px;
@@ -1251,9 +1436,9 @@ domino_html = f"""
     }}
     .domino {{
       width: clamp(120px, 12vw, 180px);
-      min-height: 180px;
+      min-height: 40px;
       border-radius: 18px;
-      padding: 14px;
+      padding: 8px;
       background: linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.05));
       border: 2px solid rgba(255, 255, 255, 0.35);
       box-shadow: 0 20px 35px rgba(0, 0, 0, 0.4), 0 0 15px rgba(102, 126, 234, 0.3);
@@ -1292,10 +1477,10 @@ domino_html = f"""
     }}
     .domino-image {{
       width: 100%;
-      height: clamp(80px, 9vw, 120px);
-      border-radius: 12px;
+      height: clamp(20px, 4vw, 30px);
+      border-radius: 8px;
       overflow: hidden;
-      margin-bottom: 10px;
+      margin-bottom: 4px;
       background: linear-gradient(45deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.1));
       display: flex;
       align-items: center;
@@ -1311,37 +1496,44 @@ domino_html = f"""
       transition: filter 0.35s ease;
     }}
     .domino-placeholder {{
-      font-size: clamp(1.5rem, 4vw, 2.2rem);
-      font-weight: 700;
-      text-transform: uppercase;
-      opacity: 0.8;
-      letter-spacing: 0.08em;
+      font-size: clamp(0.5rem, 1.2vw, 0.8rem);
+      font-weight: 600;
+      text-transform: none;
+      opacity: 0.9;
+      letter-spacing: 0.02em;
+      text-align: center;
+      color: #ffffff;
+      padding: 2px;
       background: linear-gradient(45deg, #667eea, #764ba2);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      width: 100%;
     }}
     .domino-date {{
-      font-size: clamp({st.session_state["event_date_size"] - 2}px, 2.5vw, {st.session_state["event_date_size"] + 2}px);
+      font-size: clamp({st.session_state["event_date_size"] - 6}px, 1.5vw, {st.session_state["event_date_size"] - 2}px);
       color: var(--date-color);
       font-family: var(--date-font);
       letter-spacing: 0.08em;
-      margin: 3px 0;
+      margin: 1px 0;
     }}
     .domino-title {{
-      font-size: clamp({st.session_state["event_title_size"] - 4}px, 3vw, {st.session_state["event_title_size"] + 2}px);
+      font-size: clamp({st.session_state["event_title_size"] - 8}px, 2vw, {st.session_state["event_title_size"] - 4}px);
       color: var(--title-color);
       font-family: var(--title-font);
-      margin: 3px 0 0;
-      min-height: 28px;
-      line-height: 1.1;
+      margin: 1px 0 0;
+      min-height: 12px;
+      line-height: 1.0;
     }}
     .domino:hover,
     .domino.hovering,
     .domino.pinned {{
-      transform: perspective(900px) rotateX(4deg) rotateY(0deg) rotateZ(-6deg) translateY(-18px);
+      transform: perspective(900px) rotateX(4deg) rotateY(0deg) rotateZ(-6deg) translateY(-8px);
       border-color: rgba(255, 255, 255, 0.9);
-      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(102, 126, 234, 0.6), 0 0 60px rgba(118, 75, 162, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(102, 126, 234, 0.6), 0 0 30px rgba(118, 75, 162, 0.3);
       background: linear-gradient(150deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15));
     }}
     .domino:hover::before,
@@ -1352,7 +1544,7 @@ domino_html = f"""
     }}
     .domino.pinned {{
       border-color: rgba(255, 255, 255, 1);
-      box-shadow: 0 45px 90px rgba(0, 0, 0, 0.7), 0 0 50px rgba(102, 126, 234, 0.7), 0 0 70px rgba(118, 75, 162, 0.4);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(102, 126, 234, 0.7), 0 0 40px rgba(118, 75, 162, 0.4);
     }}
     .domino.is-tilting {{
       animation: dominoTip 0.9s cubic-bezier(0.68, -0.2, 0.265, 1.2);
@@ -1418,14 +1610,22 @@ domino_html = f"""
       object-fit: cover;
     }}
     .detail-placeholder {{
-      font-size: clamp(3rem, 6vw, 4.5rem);
-      font-weight: 700;
+      font-size: clamp(1rem, 2.5vw, 1.5rem);
+      font-weight: 600;
       opacity: 0.9;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.02em;
+      text-align: center;
+      text-transform: none;
       background: linear-gradient(45deg, #667eea, #764ba2);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      padding: 10px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }}
     .detail-text {{
       flex: 1 1 260px;
@@ -1471,7 +1671,7 @@ domino_html = f"""
       <div class="detail-text">
         <h3 id="detail-title"></h3>
         <p id="detail-date"></p>
-        <p class="detail-hint">Hover to preview, click to keep a domino upright.</p>
+        <p class="detail-hint">Hover to pin an event, move mouse away to unpin.</p>
       </div>
     </section>
   </div>
@@ -1527,7 +1727,7 @@ domino_html = f"""
         }} else {{
           const placeholder = document.createElement('span');
           placeholder.className = 'domino-placeholder';
-          placeholder.textContent = createPlaceholderChar(event.title || 'Event');
+          placeholder.textContent = event.title || 'Event';
           mediaWrapper.appendChild(placeholder);
         }}
         card.appendChild(mediaWrapper);
@@ -1543,13 +1743,23 @@ domino_html = f"""
         card.appendChild(titleEl);
 
         card.addEventListener('mouseenter', () => {{
-          if (card !== activeDomino) {{
-            card.classList.add('hovering');
+          pinDomino(card, event);
+        }});
+        card.addEventListener('mouseleave', () => {{
+          if (card === activeDomino) {{
+            card.classList.remove('pinned');
+            activeDomino = null;
+            detailBlock.classList.add('hidden');
           }}
         }});
-        card.addEventListener('mouseleave', () => card.classList.remove('hovering'));
-        card.addEventListener('focus', () => card.classList.add('hovering'));
-        card.addEventListener('blur', () => card.classList.remove('hovering'));
+        card.addEventListener('focus', () => pinDomino(card, event));
+        card.addEventListener('blur', () => {{
+          if (card === activeDomino) {{
+            card.classList.remove('pinned');
+            activeDomino = null;
+            detailBlock.classList.add('hidden');
+          }}
+        }});
         card.addEventListener('click', () => pinDomino(card, event));
 
         track.appendChild(card);
@@ -1592,7 +1802,7 @@ domino_html = f"""
       }} else {{
         const placeholder = document.createElement('span');
         placeholder.className = 'detail-placeholder';
-        placeholder.textContent = createPlaceholderChar(eventData.title || 'Event');
+        placeholder.textContent = eventData.title || 'Event';
         detailMedia.appendChild(placeholder);
       }}
       detailBlock.classList.remove('hidden');
@@ -1720,6 +1930,25 @@ timeline_html = f"""
       background: var(--color);
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 20px rgba(102, 126, 234, 0.2);
       transition: border-color 0.35s ease, box-shadow 0.35s ease, transform 0.35s ease;
+    }}
+
+    .bubble-title {{
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: #ffffff;
+      text-align: center;
+      padding: 3px;
+      line-height: 1.0;
+      text-transform: none;
+      letter-spacing: 0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      word-break: break-word;
+      max-width: 60px;
+      max-height: 45px;
     }}
 
     .bubble::before {{
@@ -1850,7 +2079,7 @@ timeline_html = f"""
 
       const bubbleContent = ev.image 
         ? `<img src=\"data:image/png;base64,${{ev.image}}\" style=\"width:100%;height:100%;object-fit:cover;border-radius:50%;\">`
-        : '';
+        : `<span class=\"bubble-title\">${{ev.title || 'Event'}}</span>`;
       const dateLabel = new Date(ev.date).toLocaleDateString(undefined, {{ year: 'numeric', month: 'short', day: 'numeric' }});
       eventDiv.innerHTML = `
         <div class=\"bubble\">${{bubbleContent}}</div>
