@@ -8,6 +8,11 @@ import sys
 from io import BytesIO
 from uuid import uuid4
 import pandas as pd
+from spellchecker import SpellChecker
+import streamlit.components.v1 as components
+import os
+import zipfile
+from pathlib import Path
 
 
 def rerun_app():
@@ -17,6 +22,296 @@ def rerun_app():
     rerun_fn()
 
 DEFAULT_TITLE = "Interactive Event Timeline with Lens Magnifier"
+
+@st.cache_resource
+def get_spell_checker():
+    """Initialize and cache a spell checker instance."""
+    spell = SpellChecker()
+    # Add common event-related words that might not be in the dictionary
+    custom_words = {
+        'streamlit', 'timeline', 'event', 'magnifier', 'lens', 'orbit', 
+        'visualization', 'interactive', 'dataset', 'webinar', 'workshop',
+        'conference', 'meeting', 'presentation', 'deadline', 'milestone',
+        'launch', 'release', 'update', 'announcement', 'celebration',
+        'birthday', 'anniversary', 'holiday', 'vacation', 'travel',
+        'project', 'sprint', 'retrospective', 'planning', 'review'
+    }
+    spell.word_frequency.load_words(custom_words)
+    return spell
+
+def check_spelling_and_suggest(text, spell_checker):
+    """Check spelling of text and return suggestions for misspelled words."""
+    if not text or not text.strip():
+        return [], []
+    
+    words = text.split()
+    misspelled = spell_checker.unknown([word.lower().strip('.,!?;:"\'()[]{}') for word in words])
+    suggestions = {}
+    
+    for word in misspelled:
+        candidates = spell_checker.candidates(word)
+        if candidates:
+            suggestions[word] = list(candidates)[:3]  # Get top 3 suggestions
+    
+    return misspelled, suggestions
+
+def display_spell_suggestions(text, misspelled, suggestions):
+    """Display spelling suggestions in a user-friendly format."""
+    if not misspelled:
+        return st.success("✅ No spelling errors found!")
+    
+    st.warning(f"⚠️ Found {len(misspelled)} potential spelling error(s):")
+    
+    for word in misspelled:
+        if word in suggestions:
+            suggestion_text = ", ".join(suggestions[word])
+            st.info(f"• **{word}** - Did you mean: {suggestion_text}?")
+        else:
+            st.info(f"• **{word}** - No suggestions available")
+
+def save_to_localstorage():
+    """Generate JavaScript to save current session state to localStorage."""
+    events_data = json.dumps(st.session_state.get("events", []))
+    settings_data = json.dumps({
+        "timeline_title": st.session_state.get("timeline_title", DEFAULT_TITLE),
+        "timeline_view": st.session_state.get("timeline_view", "Timeline"),
+        "timeline_bg_color": st.session_state.get("timeline_bg_color", "#fefcea"),
+        "event_title_color": st.session_state.get("event_title_color", "#ffffff"),
+        "event_title_font": st.session_state.get("event_title_font", "Arial"),
+        "event_title_size": st.session_state.get("event_title_size", 12),
+        "event_date_color": st.session_state.get("event_date_color", "#ffffff"),
+        "event_date_font": st.session_state.get("event_date_font", "Arial"),
+        "event_date_size": st.session_state.get("event_date_size", 10),
+        "lens_size": st.session_state.get("lens_size", 240),
+        "lens_duration": st.session_state.get("lens_duration", 0.5)
+    })
+    
+    js_code = f"""
+    <script>
+    localStorage.setItem('timeline_events', '{events_data}');
+    localStorage.setItem('timeline_settings', '{settings_data}');
+    console.log('Data saved to localStorage');
+    </script>
+    """
+    components.html(js_code, height=0)
+
+def load_from_localstorage():
+    """Generate JavaScript to load data from localStorage and trigger Streamlit rerun."""
+    js_code = """
+    <script>
+    function loadData() {
+        const events = localStorage.getItem('timeline_events');
+        const settings = localStorage.getItem('timeline_settings');
+        
+        if (events || settings) {
+            const data = {
+                events: events ? JSON.parse(events) : [],
+                settings: settings ? JSON.parse(settings) : {}
+            };
+            
+            // Send data to Streamlit
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                key: 'loaded_data',
+                value: data
+            }, '*');
+        }
+    }
+    
+    // Try to load data
+    loadData();
+    
+    // Also try loading after a short delay in case localStorage isn't ready
+    setTimeout(loadData, 100);
+    </script>
+    """
+    components.html(js_code, height=0)
+
+def clear_localstorage():
+    """Generate JavaScript to clear all localStorage data."""
+    js_code = """
+    <script>
+    localStorage.removeItem('timeline_events');
+    localStorage.removeItem('timeline_settings');
+    console.log('localStorage cleared');
+    </script>
+    """
+    components.html(js_code, height=0)
+
+def create_save_point(save_name):
+    """Create a complete save point including events, settings, and images."""
+    # Create save points directory if it doesn't exist
+    save_dir = Path("save_points")
+    save_dir.mkdir(exist_ok=True)
+    
+    # Prepare save data
+    save_data = {
+        "save_info": {
+            "name": save_name,
+            "created_at": datetime.datetime.now().isoformat(),
+            "version": "1.0",
+            "event_count": len(st.session_state.get("events", []))
+        },
+        "events": st.session_state.get("events", []),
+        "settings": {
+            "timeline_title": st.session_state.get("timeline_title", DEFAULT_TITLE),
+            "timeline_view": st.session_state.get("timeline_view", "Timeline"),
+            "timeline_bg_color": st.session_state.get("timeline_bg_color", "#fefcea"),
+            "event_title_color": st.session_state.get("event_title_color", "#ffffff"),
+            "event_title_font": st.session_state.get("event_title_font", "Arial"),
+            "event_title_size": st.session_state.get("event_title_size", 12),
+            "event_date_color": st.session_state.get("event_date_color", "#ffffff"),
+            "event_date_font": st.session_state.get("event_date_font", "Arial"),
+            "event_date_size": st.session_state.get("event_date_size", 10),
+            "lens_size": st.session_state.get("lens_size", 240),
+            "lens_duration": st.session_state.get("lens_duration", 0.5)
+        }
+    }
+    
+    # Create save point file
+    save_file = save_dir / f"{save_name}.json"
+    with open(save_file, 'w', encoding='utf-8') as f:
+        json.dump(save_data, f, indent=2, ensure_ascii=False)
+    
+    # Extract and save images
+    images_dir = save_dir / f"{save_name}_images"
+    images_dir.mkdir(exist_ok=True)
+    
+    image_files = {}
+    for i, event in enumerate(save_data["events"]):
+        if event.get("image"):
+            # Decode base64 image and save
+            try:
+                image_data = base64.b64decode(event["image"])
+                image_filename = f"event_{i}_{event['id']}.png"
+                image_path = images_dir / image_filename
+                
+                with open(image_path, 'wb') as img_file:
+                    img_file.write(image_data)
+                
+                # Store reference to image file
+                image_files[event['id']] = image_filename
+                # Remove base64 data from JSON (we'll load from file)
+                event["image_file"] = image_filename
+                del event["image"]
+            except Exception as e:
+                st.error(f"Error saving image for event {event['title']}: {e}")
+    
+    # Update save data with image file references
+    save_data["image_files"] = image_files
+    
+    # Save updated JSON
+    with open(save_file, 'w', encoding='utf-8') as f:
+        json.dump(save_data, f, indent=2, ensure_ascii=False)
+    
+    return save_file
+
+def load_save_point(save_name):
+    """Load a complete save point including events, settings, and images."""
+    save_dir = Path("save_points")
+    save_file = save_dir / f"{save_name}.json"
+    images_dir = save_dir / f"{save_name}_images"
+    
+    if not save_file.exists():
+        return False, "Save point not found"
+    
+    try:
+        # Load save data
+        with open(save_file, 'r', encoding='utf-8') as f:
+            save_data = json.load(f)
+        
+        # Restore settings
+        if "settings" in save_data:
+            settings = save_data["settings"]
+            st.session_state["timeline_title"] = settings.get("timeline_title", DEFAULT_TITLE)
+            st.session_state["timeline_view"] = settings.get("timeline_view", "Timeline")
+            st.session_state["timeline_bg_color"] = settings.get("timeline_bg_color", "#fefcea")
+            st.session_state["event_title_color"] = settings.get("event_title_color", "#ffffff")
+            st.session_state["event_title_font"] = settings.get("event_title_font", "Arial")
+            st.session_state["event_title_size"] = settings.get("event_title_size", 12)
+            st.session_state["event_date_color"] = settings.get("event_date_color", "#ffffff")
+            st.session_state["event_date_font"] = settings.get("event_date_font", "Arial")
+            st.session_state["event_date_size"] = settings.get("event_date_size", 10)
+            st.session_state["lens_size"] = settings.get("lens_size", 240)
+            st.session_state["lens_duration"] = settings.get("lens_duration", 0.5)
+        
+        # Restore events with images
+        events = []
+        for event in save_data.get("events", []):
+            event_copy = event.copy()
+            
+            # Load image if available
+            if "image_file" in event and images_dir.exists():
+                image_path = images_dir / event["image_file"]
+                if image_path.exists():
+                    try:
+                        with open(image_path, 'rb') as img_file:
+                            image_data = img_file.read()
+                        event_copy["image"] = base64.b64encode(image_data).decode()
+                    except Exception as e:
+                        st.error(f"Error loading image for event {event['title']}: {e}")
+                        event_copy["image"] = None
+                
+                # Remove temporary image_file reference
+                del event_copy["image_file"]
+            else:
+                event_copy["image"] = None
+            
+            events.append(event_copy)
+        
+        st.session_state["events"] = events
+        
+        return True, f"Successfully loaded save point: {save_name}"
+        
+    except Exception as e:
+        return False, f"Error loading save point: {str(e)}"
+
+def get_save_points():
+    """Get list of all available save points."""
+    save_dir = Path("save_points")
+    if not save_dir.exists():
+        return []
+    
+    save_points = []
+    for file_path in save_dir.glob("*.json"):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                save_data = json.load(f)
+            
+            save_info = save_data.get("save_info", {})
+            save_points.append({
+                "name": file_path.stem,
+                "created_at": save_info.get("created_at", "Unknown"),
+                "event_count": save_info.get("event_count", 0),
+                "title": save_info.get("name", file_path.stem)
+            })
+        except Exception as e:
+            st.error(f"Error reading save point {file_path.name}: {e}")
+    
+    return sorted(save_points, key=lambda x: x["created_at"], reverse=True)
+
+def delete_save_point(save_name):
+    """Delete a save point and its associated images."""
+    save_dir = Path("save_points")
+    save_file = save_dir / f"{save_name}.json"
+    images_dir = save_dir / f"{save_name}_images"
+    
+    deleted_files = []
+    
+    # Delete save file
+    if save_file.exists():
+        save_file.unlink()
+        deleted_files.append(str(save_file))
+    
+    # Delete images directory
+    if images_dir.exists():
+        for img_file in images_dir.glob("*"):
+            img_file.unlink()
+            deleted_files.append(str(img_file))
+        images_dir.rmdir()
+        deleted_files.append(str(images_dir))
+    
+    return deleted_files
 
 
 @st.cache_resource
@@ -60,267 +355,385 @@ if "timeline_view" not in st.session_state:
 if "events" not in st.session_state:
     st.session_state["events"] = []
 
+# Try to restore data from localStorage on page load
+if "data_restored" not in st.session_state:
+    load_from_localstorage()
+    st.session_state["data_restored"] = True
+
+# Check for loaded data from localStorage
+if "loaded_data" in st.session_state:
+    loaded_data = st.session_state["loaded_data"]
+    if loaded_data and isinstance(loaded_data, dict):
+        # Restore events
+        if "events" in loaded_data and loaded_data["events"]:
+            st.session_state["events"] = loaded_data["events"]
+        
+        # Restore settings
+        if "settings" in loaded_data and loaded_data["settings"]:
+            settings = loaded_data["settings"]
+            st.session_state["timeline_title"] = settings.get("timeline_title", DEFAULT_TITLE)
+            st.session_state["timeline_view"] = settings.get("timeline_view", "Timeline")
+            st.session_state["timeline_bg_color"] = settings.get("timeline_bg_color", "#fefcea")
+            st.session_state["event_title_color"] = settings.get("event_title_color", "#ffffff")
+            st.session_state["event_title_font"] = settings.get("event_title_font", "Arial")
+            st.session_state["event_title_size"] = settings.get("event_title_size", 12)
+            st.session_state["event_date_color"] = settings.get("event_date_color", "#ffffff")
+            st.session_state["event_date_font"] = settings.get("event_date_font", "Arial")
+            st.session_state["event_date_size"] = settings.get("event_date_size", 10)
+            st.session_state["lens_size"] = settings.get("lens_size", 240)
+            st.session_state["lens_duration"] = settings.get("lens_duration", 0.5)
+    
+    # Clear the loaded data to prevent reprocessing
+    del st.session_state["loaded_data"]
+
 
 st.title(st.session_state["timeline_title"])
 
 
 # Sidebar for data entry
 with st.sidebar:
-    view_choice = st.radio(
-        "Visualization Style",
-        ("Timeline", "Orbit"),
-        index=0 if st.session_state["timeline_view"] == "Timeline" else 1,
-        help="Choose between a horizontal timeline or circular orbit layout."
-    )
-    st.session_state["timeline_view"] = view_choice
+    # 🎨 Timeline Settings Section
+    with st.expander("🎨 Timeline Settings", expanded=True):
+        view_choice = st.radio(
+            "Visualization Style",
+            ("Timeline", "Orbit"),
+            index=0 if st.session_state["timeline_view"] == "Timeline" else 1,
+            help="Choose between a horizontal timeline or circular orbit layout."
+        )
+        st.session_state["timeline_view"] = view_choice
 
-    st.session_state["timeline_title"] = st.text_input(
-        "Timeline Title",
-        value=st.session_state.get("timeline_title", DEFAULT_TITLE),
-        help="Displayed at the top of the timeline."
-    ) or DEFAULT_TITLE
+        st.session_state["timeline_title"] = st.text_input(
+            "Timeline Title",
+            value=st.session_state.get("timeline_title", DEFAULT_TITLE),
+            help="Displayed at the top of the timeline."
+        ) or DEFAULT_TITLE
+        
+        # Add spell checking for timeline title
+        current_title = st.session_state.get("timeline_title", DEFAULT_TITLE)
+        if current_title and current_title != DEFAULT_TITLE:
+            spell_checker = get_spell_checker()
+            misspelled, suggestions = check_spelling_and_suggest(current_title, spell_checker)
+            
+            if misspelled:
+                st.markdown("🔍 **Timeline Title Spelling:**")
+                display_spell_suggestions(current_title, misspelled, suggestions)
 
-    # Background color picker for horizontal timeline
-    if "timeline_bg_color" not in st.session_state:
-        st.session_state["timeline_bg_color"] = "#fefcea"
-    
-    timeline_bg_color = st.color_picker(
-        "Timeline Background Color",
-        value=st.session_state["timeline_bg_color"],
-        help="Set the background color for the horizontal timeline view."
-    )
-    st.session_state["timeline_bg_color"] = timeline_bg_color
+        # Background color picker for horizontal timeline
+        if "timeline_bg_color" not in st.session_state:
+            st.session_state["timeline_bg_color"] = "#fefcea"
+        
+        timeline_bg_color = st.color_picker(
+            "Timeline Background Color",
+            value=st.session_state["timeline_bg_color"],
+            help="Set the background color for the horizontal timeline view."
+        )
+        st.session_state["timeline_bg_color"] = timeline_bg_color
 
-    # Event title styling options
-    if "event_title_color" not in st.session_state:
-        st.session_state["event_title_color"] = "#ffffff"
-    
-    if "event_title_font" not in st.session_state:
-        st.session_state["event_title_font"] = "Arial"
-    
-    if "event_title_size" not in st.session_state:
-        st.session_state["event_title_size"] = 12
-    
-    st.markdown("### Event Title Styling")
-    
-    event_title_color = st.color_picker(
-        "Title Color",
-        value=st.session_state["event_title_color"],
-        help="Set the color of event titles."
-    )
-    st.session_state["event_title_color"] = event_title_color
-    
-    event_title_font = st.selectbox(
-        "Title Font",
-        options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
-        index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_title_font"]),
-        help="Choose the font for event titles."
-    )
-    st.session_state["event_title_font"] = event_title_font
-    
-    event_title_size = st.slider(
-        "Title Size (px)",
-        min_value=8,
-        max_value=24,
-        value=st.session_state["event_title_size"],
-        help="Set the font size for event titles in pixels."
-    )
-    st.session_state["event_title_size"] = event_title_size
+    # 🎯 Event Styling Section
+    with st.expander("🎯 Event Styling", expanded=False):
+        # Event title styling options
+        if "event_title_color" not in st.session_state:
+            st.session_state["event_title_color"] = "#ffffff"
+        
+        if "event_title_font" not in st.session_state:
+            st.session_state["event_title_font"] = "Arial"
+        
+        if "event_title_size" not in st.session_state:
+            st.session_state["event_title_size"] = 12
+        
+        st.markdown("**Event Title Styling**")
+        
+        event_title_color = st.color_picker(
+            "Title Color",
+            value=st.session_state["event_title_color"],
+            help="Set the color of event titles."
+        )
+        st.session_state["event_title_color"] = event_title_color
+        
+        event_title_font = st.selectbox(
+            "Title Font",
+            options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
+            index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_title_font"]),
+            help="Choose the font for event titles."
+        )
+        st.session_state["event_title_font"] = event_title_font
+        
+        event_title_size = st.slider(
+            "Title Size (px)",
+            min_value=8,
+            max_value=24,
+            value=st.session_state["event_title_size"],
+            help="Set the font size for event titles in pixels."
+        )
+        st.session_state["event_title_size"] = event_title_size
 
-    # Event date styling options
-    if "event_date_color" not in st.session_state:
-        st.session_state["event_date_color"] = "#ffffff"
-    
-    if "event_date_font" not in st.session_state:
-        st.session_state["event_date_font"] = "Arial"
-    
-    if "event_date_size" not in st.session_state:
-        st.session_state["event_date_size"] = 10
-    
-    event_date_color = st.color_picker(
-        "Date Color",
-        value=st.session_state["event_date_color"],
-        help="Set the color of event dates."
-    )
-    st.session_state["event_date_color"] = event_date_color
-    
-    event_date_font = st.selectbox(
-        "Date Font",
-        options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
-        index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_date_font"]),
-        help="Choose the font for event dates."
-    )
-    st.session_state["event_date_font"] = event_date_font
-    
-    event_date_size = st.slider(
-        "Date Size (px)",
-        min_value=6,
-        max_value=18,
-        value=st.session_state["event_date_size"],
-        help="Set the font size for event dates in pixels."
-    )
-    st.session_state["event_date_size"] = event_date_size
+        # Event date styling options
+        if "event_date_color" not in st.session_state:
+            st.session_state["event_date_color"] = "#ffffff"
+        
+        if "event_date_font" not in st.session_state:
+            st.session_state["event_date_font"] = "Arial"
+        
+        if "event_date_size" not in st.session_state:
+            st.session_state["event_date_size"] = 10
+        
+        st.markdown("**Event Date Styling**")
+        
+        event_date_color = st.color_picker(
+            "Date Color",
+            value=st.session_state["event_date_color"],
+            help="Set the color of event dates."
+        )
+        st.session_state["event_date_color"] = event_date_color
+        
+        event_date_font = st.selectbox(
+            "Date Font",
+            options=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"],
+            index=["Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New", "Impact", "Comic Sans MS"].index(st.session_state["event_date_font"]),
+            help="Choose the font for event dates."
+        )
+        st.session_state["event_date_font"] = event_date_font
+        
+        event_date_size = st.slider(
+            "Date Size (px)",
+            min_value=6,
+            max_value=18,
+            value=st.session_state["event_date_size"],
+            help="Set the font size for event dates in pixels."
+        )
+        st.session_state["event_date_size"] = event_date_size
 
-    # Lens styling options
-    if "lens_size" not in st.session_state:
-        st.session_state["lens_size"] = 240
-    
-    lens_size = st.slider(
-        "Lens Size (px)",
-        min_value=120,
-        max_value=400,
-        value=st.session_state["lens_size"],
-        help="Set the size of the lens in pixels."
-    )
-    st.session_state["lens_size"] = lens_size
+    # 🔍 Lens Settings Section
+    with st.expander("🔍 Lens Settings", expanded=False):
+        # Lens styling options
+        if "lens_size" not in st.session_state:
+            st.session_state["lens_size"] = 240
+        
+        lens_size = st.slider(
+            "Lens Size (px)",
+            min_value=120,
+            max_value=400,
+            value=st.session_state["lens_size"],
+            help="Set the size of the lens in pixels."
+        )
+        st.session_state["lens_size"] = lens_size
 
-    # Lens magnification duration
-    if "lens_duration" not in st.session_state:
-        st.session_state["lens_duration"] = 0.5
-    
-    lens_duration = st.slider(
-        "Magnification Delay (seconds)",
-        min_value=0.0,
-        max_value=3.0,
-        value=st.session_state["lens_duration"],
-        step=0.1,
-        help="Delay before magnification effect when event enters the lens."
-    )
-    st.session_state["lens_duration"] = lens_duration
+        # Lens magnification duration
+        if "lens_duration" not in st.session_state:
+            st.session_state["lens_duration"] = 0.5
+        
+        lens_duration = st.slider(
+            "Magnification Delay (seconds)",
+            min_value=0.0,
+            max_value=3.0,
+            value=st.session_state["lens_duration"],
+            step=0.1,
+            help="Delay before magnification effect when event enters the lens."
+        )
+        st.session_state["lens_duration"] = lens_duration
 
-    st.header("Add a New Event")
-    title_input = st.text_input("Event Title")
-    date_input = st.date_input("Event Date", datetime.date(2002, 1, 1), min_value=datetime.date(2002, 1, 1), max_value=datetime.date.today())
-    image_file = st.file_uploader("Upload an image (optional)", type=["png", "jpg", "jpeg", "gif"])
-    image_data = None
-    if image_file:
-        image_data = base64.b64encode(image_file.read()).decode()
-
-    if st.button("Add Event"):
+    # ➕ Add Event Section
+    with st.expander("➕ Add New Event", expanded=True):
+        title_input = st.text_input("Event Title")
+        
+        # Add spell checking for event title
         if title_input:
-            st.session_state["events"].append(
-                {
-                    "id": str(uuid4()),
-                    "title": title_input,
-                    "date": date_input.isoformat(),
-                    "image": image_data,
-                }
-            )
-            # Force a rerun so the timeline updates immediately
-            rerun_app()
-        else:
-            st.warning("Please enter an event title before adding.")
+            spell_checker = get_spell_checker()
+            misspelled, suggestions = check_spelling_and_suggest(title_input, spell_checker)
+            
+            with st.expander("🔍 Check Spelling", expanded=False):
+                display_spell_suggestions(title_input, misspelled, suggestions)
+        
+        date_input = st.date_input("Event Date", datetime.date(2002, 1, 1), min_value=datetime.date(2002, 1, 1), max_value=datetime.date.today())
+        image_file = st.file_uploader("Upload an image (optional)", type=["png", "jpg", "jpeg", "gif"])
+        image_data = None
+        if image_file:
+            image_data = base64.b64encode(image_file.read()).decode()
 
-    st.markdown("---")
-    st.subheader("Import Events from Excel")
-    st.info("Excel file must contain columns named 'eventname' and 'eventdate' (case-insensitive)")
-    excel_file = st.file_uploader("Upload Excel file", type=["xlsx", "xls", "xlsb"], key="excel_uploader")
-    if excel_file:
-        try:
-            ext = excel_file.name.split(".")[-1].lower()
-            read_kwargs = {}
-            if ext == "xlsb":
-                if importlib.util.find_spec("pyxlsb") is None:
-                    st.error("pyxlsb package is required for .xlsb files. Please install it with: pip install pyxlsb")
-                    st.stop()
-                read_kwargs["engine"] = "pyxlsb"
-            
-            st.info(f"Reading Excel file: {excel_file.name}")
-            df = pd.read_excel(excel_file, **read_kwargs)
-            
-            # Show file info
-            st.write(f"Found {len(df)} rows in Excel file")
-            st.write("Columns found:", df.columns.tolist())
-            
-            missing_cols = {"eventname", "eventdate"} - set(col.lower() for col in df.columns)
-            if missing_cols:
-                st.error(f"Excel file must contain columns: eventname, eventdate. Missing: {missing_cols}")
-                st.write("Available columns:", [col for col in df.columns])
+        if st.button("Add Event"):
+            if title_input:
+                st.session_state["events"].append(
+                    {
+                        "id": str(uuid4()),
+                        "title": title_input,
+                        "date": date_input.isoformat(),
+                        "image": image_data,
+                    }
+                )
+                # Auto-save to localStorage
+                save_to_localstorage()
+                # Force a rerun so the timeline updates immediately
+                rerun_app()
             else:
-                normalized = {col.lower(): col for col in df.columns}
-                new_events = []
-                skipped_count = 0
-                duplicate_count = 0
+                st.warning("Please enter an event title before adding.")
+
+    # 📊 Import/Export Section
+    with st.expander("📊 Import & Export", expanded=False):
+        st.markdown("**Import Events from Excel**")
+        st.info("Excel file must contain columns named 'eventname' and 'eventdate' (case-insensitive)")
+        excel_file = st.file_uploader("Upload Excel file", type=["xlsx", "xls", "xlsb"], key="excel_uploader")
+        if excel_file:
+            try:
+                ext = excel_file.name.split(".")[-1].lower()
+                read_kwargs = {}
+                if ext == "xlsb":
+                    if importlib.util.find_spec("pyxlsb") is None:
+                        st.error("pyxlsb package is required for .xlsb files. Please install it with: pip install pyxlsb")
+                        st.stop()
+                    read_kwargs["engine"] = "pyxlsb"
                 
-                # Get existing events for duplicate checking
-                existing_events = set()
-                for ev in st.session_state["events"]:
-                    key = (ev["title"].lower().strip(), ev["date"])
-                    existing_events.add(key)
+                st.info(f"Reading Excel file: {excel_file.name}")
+                df = pd.read_excel(excel_file, **read_kwargs)
                 
-                for idx, row in df.iterrows():
-                    name = row[normalized["eventname"]]
-                    date_val = row[normalized["eventdate"]]
+                # Show file info
+                st.write(f"Found {len(df)} rows in Excel file")
+                st.write("Columns found:", df.columns.tolist())
+                
+                missing_cols = {"eventname", "eventdate"} - set(col.lower() for col in df.columns)
+                if missing_cols:
+                    st.error(f"Excel file must contain columns: eventname, eventdate. Missing: {missing_cols}")
+                    st.write("Available columns:", [col for col in df.columns])
+                else:
+                    normalized = {col.lower(): col for col in df.columns}
+                    new_events = []
+                    skipped_count = 0
+                    duplicate_count = 0
                     
-                    if pd.isna(name) or pd.isna(date_val):
-                        skipped_count += 1
-                        continue
+                    # Get existing events for duplicate checking
+                    existing_events = set()
+                    for ev in st.session_state["events"]:
+                        key = (ev["title"].lower().strip(), ev["date"])
+                        existing_events.add(key)
+                    
+                    for idx, row in df.iterrows():
+                        name = row[normalized["eventname"]]
+                        date_val = row[normalized["eventdate"]]
                         
-                    try:
-                        # Handle pandas Timestamp objects (most common from Excel)
-                        if hasattr(date_val, 'date'):
-                            parsed_date = date_val.date()
-                        # Handle datetime objects
-                        elif isinstance(date_val, datetime.datetime):
-                            parsed_date = date_val.date()
-                        # Handle date objects
-                        elif isinstance(date_val, datetime.date):
-                            parsed_date = date_val
-                        # Handle string dates
-                        else:
-                            parsed_date = pd.to_datetime(date_val).date()
-                        
-                        # Validate minimum date constraint
-                        if parsed_date < datetime.date(2002, 1, 1):
-                            st.warning(f"Row {idx+1}: Skipping event '{name}' - date {parsed_date} is before minimum allowed date (2002-01-01)")
+                        if pd.isna(name) or pd.isna(date_val):
                             skipped_count += 1
                             continue
                             
-                        date_iso = parsed_date.isoformat()
-                    except Exception as e:
-                        st.warning(f"Row {idx+1}: Skipping event '{name}' - invalid date format: {date_val}")
-                        skipped_count += 1
-                        continue
+                        try:
+                            # Handle pandas Timestamp objects (most common from Excel)
+                            if hasattr(date_val, 'date'):
+                                parsed_date = date_val.date()
+                            # Handle datetime objects
+                            elif isinstance(date_val, datetime.datetime):
+                                parsed_date = date_val.date()
+                            # Handle date objects
+                            elif isinstance(date_val, datetime.date):
+                                parsed_date = date_val
+                            # Handle string dates
+                            else:
+                                parsed_date = pd.to_datetime(date_val).date()
+                            
+                            # Validate minimum date constraint
+                            if parsed_date < datetime.date(2002, 1, 1):
+                                st.warning(f"Row {idx+1}: Skipping event '{name}' - date {parsed_date} is before minimum allowed date (2002-01-01)")
+                                skipped_count += 1
+                                continue
+                                
+                            date_iso = parsed_date.isoformat()
+                        except Exception as e:
+                            st.warning(f"Row {idx+1}: Skipping event '{name}' - invalid date format: {date_val}")
+                            skipped_count += 1
+                            continue
+                        
+                        # Check for duplicates
+                        event_key = (str(name).lower().strip(), date_iso)
+                        if event_key in existing_events:
+                            duplicate_count += 1
+                            continue
+                            
+                        existing_events.add(event_key)
+                            
+                        new_events.append(
+                            {
+                                "id": str(uuid4()),
+                                "title": str(name).strip(),
+                                "date": date_iso,
+                                "image": None,
+                            }
+                        )
                     
-                    # Check for duplicates
-                    event_key = (str(name).lower().strip(), date_iso)
-                    if event_key in existing_events:
-                        duplicate_count += 1
-                        continue
-                        
-                    existing_events.add(event_key)
-                        
-                    new_events.append(
-                        {
-                            "id": str(uuid4()),
-                            "title": str(name).strip(),
-                            "date": date_iso,
-                            "image": None,
-                        }
+                    if new_events:
+                        st.session_state["events"].extend(new_events)
+                        st.success(f"Successfully imported {len(new_events)} events from Excel.")
+                        if skipped_count > 0:
+                            st.info(f"Skipped {skipped_count} rows due to missing data or invalid dates")
+                        if duplicate_count > 0:
+                            st.info(f"Skipped {duplicate_count} duplicate events that already exist")
+                        # Clear the file uploader to prevent re-importing on rerun
+                        st.session_state["excel_uploader"] = None
+                        st.rerun()
+                    else:
+                        st.warning("No valid rows found to import. Check that your Excel file has proper eventname and eventdate columns.")
+            except Exception as exc:
+                st.error(f"Failed to read Excel file: {exc}")
+                st.write("Please ensure your Excel file is not corrupted and has the correct format.")
+
+        st.markdown("---")
+        st.markdown("**Export Events to Excel**")
+        if st.session_state["events"]:
+            sorted_export = sorted(
+                st.session_state["events"],
+                key=lambda e: datetime.date.fromisoformat(e["date"]),
+            )
+            export_rows = [
+                {
+                    "eventname": ev["title"],
+                    "eventdate": ev["date"],
+                    "image": ev.get("image"),
+                }
+                for ev in sorted_export
+            ]
+            export_df = pd.DataFrame(export_rows)
+            excel_buffer = BytesIO()
+
+            engine = ensure_excel_engine()
+            if engine is None:
+                st.error(
+                    "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
+                    "Please install one of them in the deployment environment."
+                )
+                excel_buffer = None
+            else:
+                try:
+                    export_df.to_excel(excel_buffer, index=False, engine=engine)
+                except ModuleNotFoundError:
+                    st.error(
+                        "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
+                        "Please install one of them in the deployment environment."
                     )
-                
-                if new_events:
-                    st.session_state["events"].extend(new_events)
-                    st.success(f"Successfully imported {len(new_events)} events from Excel.")
-                    if skipped_count > 0:
-                        st.info(f"Skipped {skipped_count} rows due to missing data or invalid dates")
-                    if duplicate_count > 0:
-                        st.info(f"Skipped {duplicate_count} duplicate events that already exist")
-                    # Clear the file uploader to prevent re-importing on rerun
-                    st.session_state["excel_uploader"] = None
-                    st.rerun()
-                else:
-                    st.warning("No valid rows found to import. Check that your Excel file has proper eventname and eventdate columns.")
-        except Exception as exc:
-            st.error(f"Failed to read Excel file: {exc}")
-            st.write("Please ensure your Excel file is not corrupted and has the correct format.")
+                    excel_buffer = None
+
+            if excel_buffer is not None:
+                st.download_button(
+                    label="Download events.xlsx",
+                    data=excel_buffer.getvalue(),
+                    file_name="timeline_events.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        else:
+            st.info("Add events to enable exporting.")
 
 # Editing existing events
 with st.sidebar:
-    st.header("Edit Previous Events")
+    # ✏️ Edit Events Section (no outer expander to avoid nesting)
+    st.markdown("### ✏️ Edit Previous Events")
     for idx, ev in enumerate(st.session_state["events"]):
         with st.expander(f"{ev['title']} - {ev['date']}", expanded=False):
             new_title = st.text_input(f"Title_{ev['id']}", ev["title"], key=f"title_{ev['id']}_edit")
+            
+            # Add spell checking for edited event title
+            if new_title and new_title != ev["title"]:
+                spell_checker = get_spell_checker()
+                misspelled, suggestions = check_spelling_and_suggest(new_title, spell_checker)
+                
+                if misspelled:
+                    st.markdown(f"🔍 **Spelling Check for '{ev['title']}':**")
+                    display_spell_suggestions(new_title, misspelled, suggestions)
+            
             new_date = st.date_input(
                 f"Date_{ev['id']}",
                 datetime.date.fromisoformat(ev['date']),
@@ -341,55 +754,100 @@ with st.sidebar:
                 st.session_state['events'][idx]['title'] = new_title
                 st.session_state['events'][idx]['date'] = new_date.isoformat()
                 st.session_state['events'][idx]['image'] = new_image_data
+                # Auto-save to localStorage
+                save_to_localstorage()
                 rerun_app()
             if col2.button("Delete", key=f"delete_{ev['id']}"):
                 st.session_state['events'].pop(idx)
+                # Auto-save to localStorage
+                save_to_localstorage()
                 rerun_app()
 
-    st.markdown("---")
-    st.subheader("Export Events to Excel")
-    if st.session_state["events"]:
-        sorted_export = sorted(
-            st.session_state["events"],
-            key=lambda e: datetime.date.fromisoformat(e["date"]),
-        )
-        export_rows = [
-            {
-                "eventname": ev["title"],
-                "eventdate": ev["date"],
-                "image": ev.get("image"),
-            }
-            for ev in sorted_export
-        ]
-        export_df = pd.DataFrame(export_rows)
-        excel_buffer = BytesIO()
+    # 💾 Data Management Section
+    with st.expander("💾 Data Management", expanded=False):
+        st.markdown("**Browser Storage (Auto-save)**")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("💾 Save Now", help="Manually save all events and settings to browser storage"):
+                save_to_localstorage()
+                st.success("Data saved successfully!")
+                st.rerun()
+        
+        with col2:
+            if st.button("🔄 Restore", help="Restore data from browser storage"):
+                load_from_localstorage()
+                st.info("Attempting to restore data...")
+                st.rerun()
+        
+        with col3:
+            if st.button("🗑️ Clear All", help="Clear all saved data from browser storage"):
+                clear_localstorage()
+                st.session_state["events"] = []
+                st.session_state["timeline_title"] = DEFAULT_TITLE
+                st.session_state["timeline_view"] = "Timeline"
+                st.warning("All data cleared!")
+                st.rerun()
+        
+        st.info("💡 **Auto-save enabled**: Your events and settings are automatically saved when you add, edit, or delete items. Data persists across page refreshes!")
 
-        engine = ensure_excel_engine()
-        if engine is None:
-            st.error(
-                "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
-                "Please install one of them in the deployment environment."
-            )
-            excel_buffer = None
-        else:
+    # 📁 Save Points Section (no outer expander to avoid nesting)
+    st.markdown("### 📁 Save Points (Permanent Backup)")
+    st.info("📁 **Save Points** are permanent backups stored as files on your computer. They include all events, settings, and uploaded images. You can create multiple save points and restore them anytime, even after closing the app.")
+    
+    # Create new save point
+    with st.expander("🆕 Create New Save Point", expanded=False):
+        save_name = st.text_input("Save Point Name", placeholder="e.g., My Timeline v1, Project Timeline, Backup 2024-01-15")
+        
+        if st.button("💾 Create Save Point", disabled=not save_name.strip()):
+            save_name = save_name.strip()
             try:
-                export_df.to_excel(excel_buffer, index=False, engine=engine)
-            except ModuleNotFoundError:
-                st.error(
-                    "Excel export requires the 'openpyxl' or 'XlsxWriter' package. "
-                    "Please install one of them in the deployment environment."
-                )
-                excel_buffer = None
-
-        if excel_buffer is not None:
-            st.download_button(
-                label="Download events.xlsx",
-                data=excel_buffer.getvalue(),
-                file_name="timeline_events.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+                save_file = create_save_point(save_name)
+                st.success(f"✅ Save point '{save_name}' created successfully!")
+                st.info(f"📁 Saved to: {save_file}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error creating save point: {str(e)}")
+    
+    # List and manage existing save points
+    save_points = get_save_points()
+    
+    if save_points:
+        st.write(f"📋 **{len(save_points)} Save Points Available:**")
+        
+        for save_point in save_points:
+            with st.expander(f"📁 {save_point['title']} ({save_point['event_count']} events)", expanded=False):
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    st.write(f"**Created:** {save_point['created_at']}")
+                    st.write(f"**Events:** {save_point['event_count']}")
+                    st.write(f"**Files:** `save_points/{save_point['name']}.json` + images")
+                
+                with col2:
+                    if st.button("🔄 Load", key=f"load_{save_point['name']}", help="Load this save point"):
+                        success, message = load_save_point(save_point['name'])
+                        if success:
+                            st.success(message)
+                            # Also save to localStorage for persistence
+                            save_to_localstorage()
+                            st.rerun()
+                        else:
+                            st.error(message)
+                
+                with col3:
+                    if st.button("🗑️ Delete", key=f"delete_{save_point['name']}", help="Delete this save point permanently"):
+                        if st.session_state.get(f"confirm_delete_{save_point['name']}", False):
+                            deleted_files = delete_save_point(save_point['name'])
+                            st.success(f"✅ Save point '{save_point['name']}' deleted!")
+                            st.info(f"🗑️ Deleted files: {len(deleted_files)}")
+                            st.session_state[f"confirm_delete_{save_point['name']}"] = False
+                            st.rerun()
+                        else:
+                            st.session_state[f"confirm_delete_{save_point['name']}"] = True
+                            st.warning("⚠️ Click again to confirm deletion")
     else:
-        st.info("Add events to enable exporting.")
+        st.info("📝 No save points found. Create your first save point above to permanently backup your timeline!")
 
 # If no events, prompt the user and stop
 if not st.session_state["events"]:
@@ -525,6 +983,23 @@ orbit_html = f"""
       filter: saturate(0.65);
     }}
 
+    .event .bubble .date-in-bubble {{
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 11px;
+      color: #ffffff;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      background: var(--color);
+      border-radius: 50%;
+      text-align: center;
+      padding: 2px;
+      box-sizing: border-box;
+    }}
+
     .event .label {{
       margin-top: 10px;
       font-weight: 600;
@@ -548,7 +1023,7 @@ orbit_html = f"""
 
     .event.tour-highlight {{
       z-index: 60;
-      transform: translate(-50%, -50%) translateY(-80px) scale(2.0);
+      transform: translate(-50%, -50%) scale(2.0);
     }}
 
     .event.tour-highlight .bubble {{
@@ -628,7 +1103,7 @@ orbit_html = f"""
 
       const bubbleContent = ev.image
         ? `<img src="data:image/png;base64,${{ev.image}}" alt="${{ev.title}}" />`
-        : '';
+        : `<div class="date-in-bubble">${{dateLabel}}</div>`;
       const dateLabel = new Date(ev.date).toLocaleDateString(undefined, {{ year: 'numeric', month: 'short', day: 'numeric' }});
 
       eventDiv.innerHTML = `
